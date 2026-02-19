@@ -40,7 +40,7 @@ col1, col2 = st.columns([2, 1])
 with col1:
     st.subheader("Carbon Intensity (gCO₂/kWh)")
     fig = px.line(df, x="time", y="ci", markers=True)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.dataframe(df[["time", "thermal_mw", "hydro_mw", "nuclear_mw", "res_mw", "ci"]])
 
 with col2:
