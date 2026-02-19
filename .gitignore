@@ -172,3 +172,4 @@ data/npp_real_mix.csv
 # Local real-data + logs (do not commit)
 data/npp_real_mix.csv
 logs/
+data/npp_0900_1100.csv
