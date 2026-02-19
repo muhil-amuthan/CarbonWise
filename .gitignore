@@ -168,3 +168,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 data/npp_real_mix.csv
+
+# Local real-data + logs (do not commit)
+data/npp_real_mix.csv
+logs/
