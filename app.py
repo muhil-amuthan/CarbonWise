@@ -127,7 +127,9 @@ def t2m(t):
         elif not pm and h==12: h=0
         return h*60+m
     except:
-        try: h,m=map(int,t.split(":")): return h*60+m
+        try:
+            h,m=map(int,t.split(":"))
+            return h*60+m
         except: return 0
 
 def m2t(mins): return format_time_12h((mins//60)%24,mins%60)
@@ -138,10 +140,10 @@ def validate_time(t):
         if "AM" in t or "PM" in t:
             tp=t.replace("AM","").replace("PM","").strip(); h,m=map(int,tp.split(":"))
             return 1<=h<=12 and 0<=m<60
-        h,m=map(int,t.split(";")); return 0<=h<24 and 0<=m<60
+        h,m=map(int,t.split(":")); return 0<=h<24 and 0<=m<60
     except: 
         try:
-            tp=t.strip(); h,m=map(int,tp.split(":")): return 0<=h<24 and 0<=m<60
+            tp=t.strip(); h,m=map(int,tp.split(":")); return 0<=h<24 and 0<=m<60
         except: return False
 
 def detect_ip():
