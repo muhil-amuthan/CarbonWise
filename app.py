@@ -261,6 +261,160 @@ def fetch_electricity_maps_data(lat: float, lon: float, api_token: Optional[str]
 st.set_page_config(page_title="CarbonWise | Location-Aware", page_icon="🌍", layout="wide")
 
 # ============================================================
+# FLOATING CONTROLS (Fullscreen & Sidebar Toggle)
+# ============================================================
+st.markdown("""
+<style>
+/* Floating Controls Container */
+.floating-controls {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 999999;
+    display: flex;
+    gap: 0.5rem;
+    background: rgba(15, 23, 42, 0.9);
+    padding: 0.5rem;
+    border-radius: 12px;
+    border: 1px solid rgba(74, 222, 128, 0.3);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Control Buttons */
+.control-btn {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 1px solid rgba(74, 222, 128, 0.2);
+    color: #4ade80;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1.2rem;
+}
+
+.control-btn:hover {
+    background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+    color: #0f172a;
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(74, 222, 128, 0.4);
+}
+
+/* Sidebar Collapsed State */
+.sidebar-collapsed [data-testid="stSidebar"] {
+    margin-left: -330px !important;
+    transition: margin-left 0.3s ease;
+}
+
+.sidebar-collapsed .main .block-container {
+    max-width: 100% !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+    transition: all 0.3s ease;
+}
+
+/* Fullscreen adjustments */
+.fullscreen-mode .floating-controls {
+    top: 0.5rem;
+    right: 0.5rem;
+}
+
+/* Ensure controls stay on top */
+.floating-controls button {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 1.2rem;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+</style>
+
+<div class="floating-controls" id="floatingControls">
+    <div class="control-btn" onclick="toggleSidebar()" title="Toggle Sidebar">
+        <span id="sidebarIcon">☰</span>
+    </div>
+    <div class="control-btn" onclick="toggleFullscreen()" title="Toggle Fullscreen">
+        <span id="fullscreenIcon">⛶</span>
+    </div>
+</div>
+
+<script>
+let sidebarVisible = true;
+
+function toggleSidebar() {
+    const body = document.body;
+    const icon = document.getElementById('sidebarIcon');
+    
+    if (sidebarVisible) {
+        body.classList.add('sidebar-collapsed');
+        icon.innerHTML = '→';
+    } else {
+        body.classList.remove('sidebar-collapsed');
+        icon.innerHTML = '☰';
+    }
+    sidebarVisible = !sidebarVisible;
+    
+    // Trigger resize event for plots
+    setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+    }, 300);
+}
+
+function toggleFullscreen() {
+    const icon = document.getElementById('fullscreenIcon');
+    const controls = document.getElementById('floatingControls');
+    
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().then(() => {
+            icon.innerHTML = '⛶';
+            controls.classList.add('fullscreen-mode');
+        }).catch(err => {
+            console.log('Error attempting to enable fullscreen:', err);
+        });
+    } else {
+        document.exitFullscreen().then(() => {
+            icon.innerHTML = '⛶';
+            controls.classList.remove('fullscreen-mode');
+        });
+    }
+}
+
+// Update icon on fullscreen change
+document.addEventListener('fullscreenchange', () => {
+    const icon = document.getElementById('fullscreenIcon');
+    if (document.fullscreenElement) {
+        icon.innerHTML = '⛶';
+    } else {
+        icon.innerHTML = '⛶';
+    }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    // F11 for fullscreen
+    if (e.key === 'F11') {
+        e.preventDefault();
+        toggleFullscreen();
+    }
+    // F10 for sidebar
+    if (e.key === 'F10') {
+        e.preventDefault();
+        toggleSidebar();
+    }
+});
+</script>
+""", unsafe_allow_html=True)
+
+# ============================================================
 # Enhanced CSS Styles - Fixed to remove text overlap
 # ============================================================
 st.markdown("""
