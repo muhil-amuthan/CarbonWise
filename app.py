@@ -184,24 +184,22 @@ def fetch_electricity_maps_data(lat: float, lon: float, api_token: Optional[str]
             ci = data.get("carbonIntensity", 400)
             
             # Generate 24h forecast based on typical daily patterns
-            # In production, use the forecast endpoint
             times, cis = [], []
             base_ci = ci
             
             for h in range(24):
                 for m in [0, 15, 30, 45]:
                     t = f"{h:02d}:{m:02d}"
-                    # Simulate daily variation (lower at night, higher during day)
                     hour_factor = 1.0
-                    if 0 <= h < 6:  # Night
+                    if 0 <= h < 6:
                         hour_factor = 0.7
-                    elif 6 <= h < 10:  # Morning ramp
+                    elif 6 <= h < 10:
                         hour_factor = 1.2
-                    elif 10 <= h < 16:  # Midday
+                    elif 10 <= h < 16:
                         hour_factor = 1.0
-                    elif 16 <= h < 22:  # Evening peak
+                    elif 16 <= h < 22:
                         hour_factor = 1.3
-                    else:  # Late night
+                    else:
                         hour_factor = 0.8
                     
                     times.append(t)
@@ -499,7 +497,7 @@ st.markdown("""
     <h1>🌍 CarbonWise</h1>
     <p>Location-aware carbon intensity optimization. Automatically detects your grid region and optimizes appliance scheduling for minimal CO₂ impact.</p>
     <div style="margin-top: 1rem;">
-        <span style="background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.875rem; font-weight: 600;">⚡ Live Grid Optimization</span>
+        <span class="badge-success">⚡ Live Grid Optimization</span>
         <span style="margin-left: 0.5rem; color: #64748b; font-size: 0.9rem;">Powered by Electricity Maps & System Time</span>
     </div>
 </div>
@@ -537,7 +535,6 @@ with st.sidebar:
                 else:
                     st.error("Detection failed. Switch to Manual Select.")
         
-        # Show current coordinates
         st.markdown(f"""
         <div style="background: #1f2937; padding: 0.75rem; border-radius: 8px; margin-top: 0.5rem;">
             <div style="color: #94a3b8; font-size: 0.75rem;">Current Coordinates</div>
@@ -591,7 +588,6 @@ with st.sidebar:
         current_tz = st.session_state.timezone if st.session_state.timezone in tz_options else "UTC"
         st.session_state.timezone = st.selectbox("Timezone", tz_options, index=tz_options.index(current_tz) if current_tz in tz_options else 0)
     
-    # Display Location Badge
     location_display = st.session_state.selected_zone if location_mode == "Manual Select" else f"{st.session_state.lat:.2f}, {st.session_state.lon:.2f}"
     st.markdown(f"""
     <div style="margin-top: 1rem;">
@@ -681,7 +677,6 @@ with st.sidebar:
     else:
         st.session_state.deadline = deadline
     
-    # Calculate available time
     now_mins = time_to_minutes(current_time_rounded)
     deadline_mins = time_to_minutes(deadline)
     
@@ -727,19 +722,18 @@ def load_data_sample() -> pd.DataFrame:
         for h in range(24):
             for m in [0, 15, 30, 45]:
                 t = f"{h:02d}:{m:02d}"
-                # Simulate realistic daily load curve
                 base_load = 3000
-                if 0 <= h < 5: load_factor = 0.6      # Night
-                elif 5 <= h < 8: load_factor = 0.8      # Morning ramp
-                elif 8 <= h < 12: load_factor = 1.0     # Business hours
-                elif 12 <= h < 17: load_factor = 1.1    # Afternoon peak
-                elif 17 <= h < 21: load_factor = 1.2     # Evening peak
-                else: load_factor = 0.9                  # Late evening
+                if 0 <= h < 5: load_factor = 0.6
+                elif 5 <= h < 8: load_factor = 0.8
+                elif 8 <= h < 12: load_factor = 1.0
+                elif 12 <= h < 17: load_factor = 1.1
+                elif 17 <= h < 21: load_factor = 1.2
+                else: load_factor = 0.9
                 
-                thermal = int(base_load * load_factor * 0.6)  # 60% thermal
-                hydro = 1500                                  # Base hydro
-                nuclear = 2000                                # Base nuclear
-                res = int(800 + (1200 if 10 <= h <= 16 else 0))  # Solar peak
+                thermal = int(base_load * load_factor * 0.6)
+                hydro = 1500
+                nuclear = 2000
+                res = int(800 + (1200 if 10 <= h <= 16 else 0))
                 
                 data.append({
                     "time": t,
@@ -828,11 +822,13 @@ if best and current_ci > 0:
 st.markdown("### 📊 Current Session Overview")
 
 kpi_cols = st.columns(5)
+
 with kpi_cols[0]:
+    location_label = st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else "Auto-Detected"
     st.markdown(f"""
     <div class="kpi">
         <div class="metric-label">🌍 Location</div>
-        <div class="metric-value" style="font-size: 1.2rem;">{st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else "Auto-Detected"}</div>
+        <div class="metric-value" style="font-size: 1.2rem;">{location_label}</div>
         <div class="metric-sub">{st.session_state.timezone}</div>
     </div>
     """, unsafe_allow_html=True)
@@ -867,18 +863,20 @@ with kpi_cols[3]:
 
 with kpi_cols[4]:
     best_color = "#4ade80" if best else "#64748b"
+    best_start = best["start"] if best else "--:--"
+    savings_text = f"Save ~{potential_savings:.1f}%" if potential_savings > 0 else "No savings"
     st.markdown(f"""
     <div class="kpi" style="border-left-color: {best_color}">
         <div class="metric-label">✨ Best Window</div>
-        <div class="metric-value" style="color: {best_color}">{best["start"] if best else "--:--"}</div>
-        <div class="metric-sub">{f"Save ~{potential_savings:.1f}%" if potential_savings > 0 else "No savings"}</div>
+        <div class="metric-value" style="color: {best_color}">{best_start}</div>
+        <div class="metric-sub">{savings_text}</div>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("---")
 
 # ============================================================
-# Tabs (Content remains similar but with location context)
+# Tabs
 # ============================================================
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Dashboard", "🎯 Smart Advisor", "📊 Analytics", "📝 Logger", "🔍 Data"])
 
@@ -900,12 +898,10 @@ with tab1:
             name='Carbon Intensity'
         ))
         
-        # Add reference bands
         fig.add_hrect(y0=0, y1=200, fillcolor="#4ade80", opacity=0.05, line_width=0, name="Low")
         fig.add_hrect(y0=200, y1=400, fillcolor="#fbbf24", opacity=0.05, line_width=0, name="Medium")
         fig.add_hrect(y0=400, y1=800, fillcolor="#f87171", opacity=0.05, line_width=0, name="High")
         
-        # Highlight recommendation windows
         if windows:
             for i, w in enumerate(windows[:3]):
                 fig.add_vrect(
@@ -919,7 +915,6 @@ with tab1:
                     name=f"Window {i+1}"
                 )
         
-        # Current time and deadline markers
         fig.add_vline(x=now_time, line_dash="dash", line_color="#4ade80", line_width=2)
         fig.add_vline(x=deadline, line_dash="dash", line_color="#f87171", line_width=2)
         
@@ -990,7 +985,6 @@ with tab2:
     
     if not windows:
         st.warning(f"⚠️ No valid windows found! Try extending deadline or reducing duration.")
-        # Show why
         st.info(f"""
         **Debug Info:**
         - Current time: {now_time}
@@ -1059,13 +1053,12 @@ with tab3:
     projected_savings = co2_now - co2_best
     savings_pct = (projected_savings / co2_now * 100) if co2_now > 0 else 0
     
-    # Location context
+    location_label = st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else f"Lat: {st.session_state.lat:.2f}, Lon: {st.session_state.lon:.2f}"
     st.markdown(f"""
     <div style="background: #1e293b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
         <div style="color: #94a3b8; font-size: 0.875rem;">Location Context</div>
         <div style="color: white; font-size: 1rem;">
-            {st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else f"Lat: {st.session_state.lat:.2f}, Lon: {st.session_state.lon:.2f}"} 
-            • {st.session_state.timezone} • Data: {st.session_state.data_source}
+            {location_label} • {st.session_state.timezone} • Data: {st.session_state.data_source}
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1186,7 +1179,6 @@ with tab4:
 with tab5:
     st.subheader("🔍 Raw Data & Configuration")
     
-    # Show location config
     with st.expander("📍 Current Location Configuration"):
         config_data = {
             "Mode": st.session_state.location_mode,
@@ -1203,7 +1195,6 @@ with tab5:
             save_location_config(config_data)
             st.success("Configuration saved!")
     
-    # Show raw data
     show_cols = ["time", "thermal_mw", "hydro_mw", "nuclear_mw", "res_mw", "ci"]
     show_cols = [c for c in show_cols if c in raw.columns]
     
