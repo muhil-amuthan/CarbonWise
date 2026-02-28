@@ -2,10 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import numpy as np
 import json
+import requests
+import pytz
+from typing import Optional, Dict, List, Tuple
 
 # ============================================================
 # CI import with fallback
@@ -21,23 +24,95 @@ except ImportError:
         return (thermal * 800 + hydro * 24 + nuclear * 12 + res * 50) / total
 
 # ============================================================
+# Location & Zone Configuration
+# ============================================================
+GRID_ZONES = {
+    "India": {
+        "zones": {
+            "North India (NR)": {"lat": 28.6139, "lon": 77.2090, "ci_avg": 450},
+            "South India (SR)": {"lat": 13.0827, "lon": 80.2707, "ci_avg": 380},
+            "West India (WR)": {"lat": 19.0760, "lon": 72.8777, "ci_avg": 420},
+            "East India (ER)": {"lat": 22.5726, "lon": 88.3639, "ci_avg": 480},
+            "North-East (NER)": {"lat": 26.1445, "lon": 91.7362, "ci_avg": 350},
+        },
+        "timezone": "Asia/Kolkata",
+        "voltage": "230V/50Hz"
+    },
+    "Europe": {
+        "zones": {
+            "Germany (DE)": {"lat": 51.1657, "lon": 10.4515, "ci_avg": 276},
+            "France (FR)": {"lat": 46.2276, "lon": 2.2137, "ci_avg": 16},
+            "UK (GB)": {"lat": 55.3781, "lon": -3.4360, "ci_avg": 106},
+            "Netherlands (NL)": {"lat": 52.1326, "lon": 5.2913, "ci_avg": 209},
+            "Spain (ES)": {"lat": 40.4637, "lon": -3.7492, "ci_avg": 89},
+            "Italy (IT)": {"lat": 41.8719, "lon": 12.5674, "ci_avg": 202},
+            "Nordics (NO/SE/FI)": {"lat": 60.4720, "lon": 8.4689, "ci_avg": 30},
+        },
+        "timezone": "Europe/Brussels",
+        "voltage": "230V/50Hz"
+    },
+    "United States": {
+        "zones": {
+            "California (CAISO)": {"lat": 36.7783, "lon": -119.4179, "ci_avg": 200},
+            "Texas (ERCOT)": {"lat": 31.9686, "lon": -99.9018, "ci_avg": 350},
+            "New York (NYISO)": {"lat": 42.1657, "lon": -74.9481, "ci_avg": 250},
+            "Midwest (MISO)": {"lat": 41.8780, "lon": -93.0977, "ci_avg": 400},
+            "PJM (East)": {"lat": 39.8283, "lon": -77.5794, "ci_avg": 320},
+            "Pacific Northwest": {"lat": 45.5152, "lon": -122.6784, "ci_avg": 100},
+        },
+        "timezone": "America/New_York",
+        "voltage": "120V/60Hz"
+    },
+    "Asia Pacific": {
+        "zones": {
+            "Australia (AUS)": {"lat": -25.2744, "lon": 133.7751, "ci_avg": 450},
+            "Japan (JP)": {"lat": 36.2048, "lon": 138.2529, "ci_avg": 450},
+            "Singapore (SG)": {"lat": 1.3521, "lon": 103.8198, "ci_avg": 367},
+            "South Korea (KR)": {"lat": 35.9078, "lon": 127.7669, "ci_avg": 357},
+        },
+        "timezone": "Asia/Tokyo",
+        "voltage": "100V-240V/50-60Hz"
+    }
+}
+
+# ============================================================
+# API Configuration
+# ============================================================
+ELECTRICITY_MAPS_API = "https://api-access.electricitymaps.com/free-tier/"
+WATTTIME_API = "https://api2.watttime.org/v2/"
+
+# ============================================================
 # Logging functions
 # ============================================================
 LOG_FILE = Path("logs/runs.jsonl")
+CONFIG_FILE = Path("config/location.json")
 
-def ensure_log_file():
+def ensure_dirs():
     Path("logs").mkdir(exist_ok=True)
+    Path("config").mkdir(exist_ok=True)
+    Path("data").mkdir(exist_ok=True)
     if not LOG_FILE.exists():
         LOG_FILE.write_text("", encoding="utf-8")
 
+def save_location_config(config: dict):
+    ensure_dirs()
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+def load_location_config() -> Optional[dict]:
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
 def append_log(row: dict):
-    ensure_log_file()
+    ensure_dirs()
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(row) + "\n")
 
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=300)
 def read_log():
-    ensure_log_file()
+    ensure_dirs()
     rows = []
     with open(LOG_FILE, "r", encoding="utf-8") as f:
         for line in f:
@@ -51,12 +126,109 @@ def read_log():
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 # ============================================================
-# Page config
+# Location & Time Functions
 # ============================================================
-st.set_page_config(page_title="CarbonWise", page_icon="🌱", layout="wide")
+def get_system_time(timezone_str: str = "UTC") -> datetime:
+    """Get current system time converted to specified timezone"""
+    try:
+        tz = pytz.timezone(timezone_str)
+        return datetime.now(tz)
+    except:
+        return datetime.now()
+
+def get_current_time(timezone_str: str = "UTC", step: int = 15) -> str:
+    """Get current time rounded to nearest step in HH:MM format"""
+    now = get_system_time(timezone_str)
+    minutes = (now.minute // step) * step
+    return f"{now.hour:02d}:{minutes:02d}"
+
+def get_current_time_exact(timezone_str: str = "UTC") -> str:
+    """Get exact current time in HH:MM:SS format"""
+    now = get_system_time(timezone_str)
+    return f"{now.hour:02d}:{now.minute:02d}:{now.second:02d}"
+
+def detect_location_ip() -> Optional[Dict]:
+    """Attempt to detect location via IP geolocation (free service)"""
+    try:
+        response = requests.get("https://ipapi.co/json/", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "lat": data.get("latitude"),
+                "lon": data.get("longitude"),
+                "city": data.get("city"),
+                "region": data.get("region"),
+                "country": data.get("country_name"),
+                "timezone": data.get("timezone"),
+                "source": "IP Geolocation"
+            }
+    except Exception as e:
+        st.warning(f"IP detection failed: {e}")
+    return None
+
+def fetch_electricity_maps_data(lat: float, lon: float, api_token: Optional[str] = None) -> Optional[pd.DataFrame]:
+    """Fetch real-time carbon intensity from Electricity Maps API"""
+    try:
+        headers = {}
+        if api_token:
+            headers["auth-token"] = api_token
+        
+        # Get current carbon intensity
+        url = f"{ELECTRICITY_MAPS_API}carbon-intensity/latest"
+        params = {"lat": lat, "lon": lon}
+        
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            ci = data.get("carbonIntensity", 400)
+            
+            # Generate 24h forecast based on typical daily patterns
+            # In production, use the forecast endpoint
+            times, cis = [], []
+            base_ci = ci
+            
+            for h in range(24):
+                for m in [0, 15, 30, 45]:
+                    t = f"{h:02d}:{m:02d}"
+                    # Simulate daily variation (lower at night, higher during day)
+                    hour_factor = 1.0
+                    if 0 <= h < 6:  # Night
+                        hour_factor = 0.7
+                    elif 6 <= h < 10:  # Morning ramp
+                        hour_factor = 1.2
+                    elif 10 <= h < 16:  # Midday
+                        hour_factor = 1.0
+                    elif 16 <= h < 22:  # Evening peak
+                        hour_factor = 1.3
+                    else:  # Late night
+                        hour_factor = 0.8
+                    
+                    times.append(t)
+                    cis.append(base_ci * hour_factor)
+            
+            df = pd.DataFrame({
+                "time": times,
+                "ci": cis,
+                "thermal_mw": [5000 * (c/base_ci) for c in cis],
+                "hydro_mw": [2000] * len(times),
+                "nuclear_mw": [1500] * len(times),
+                "res_mw": [max(0, 3000 - 5000*(c/base_ci-0.5)) for c in cis]
+            })
+            return df
+            
+    except Exception as e:
+        st.error(f"Electricity Maps API error: {e}")
+    
+    return None
 
 # ============================================================
-# CSS Styles
+# Page config
+# ============================================================
+st.set_page_config(page_title="CarbonWise | Location-Aware", page_icon="🌍", layout="wide")
+
+# ============================================================
+# Enhanced CSS Styles
 # ============================================================
 st.markdown("""
 <style>
@@ -85,6 +257,19 @@ st.markdown("""
     font-size: 1.1rem;
 }
 
+.location-badge {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
 .kpi { 
     background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); 
     padding: 1.5rem; 
@@ -105,7 +290,6 @@ st.markdown("""
     letter-spacing: 0.05em;
     font-weight: 600;
 }
-.metric-sub { color: #64748b; font-size: 0.875rem; margin-top: 0.25rem; }
 
 .card { 
     background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); 
@@ -114,45 +298,27 @@ st.markdown("""
     border: 1px solid rgba(148, 163, 184, 0.1);
 }
 
-.comparison-card {
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    border-radius: 16px;
-    padding: 2rem;
-    border: 1px solid rgba(74, 222, 128, 0.3);
-    text-align: center;
-}
-.savings-big { font-size: 3.5rem; font-weight: 800; color: #4ade80; line-height: 1; }
-
-.badge-success { 
-    background: rgba(74, 222, 128, 0.15); 
-    color: #4ade80; 
-    border: 1px solid rgba(74, 222, 128, 0.3);
-    padding: 0.5rem 1rem;
-    border-radius: 9999px;
-    font-size: 0.875rem;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-}
+[data-testid="stSidebar"] { background: #111827 !important; }
+[data-testid="stSidebar"] .stRadio > div { background: #1f2937 !important; border-radius: 8px; padding: 0.5rem; }
 
 .live-time {
     background: rgba(74, 222, 128, 0.1);
     border: 1px solid #4ade80;
-    padding: 0.5rem 1rem;
+    padding: 0.75rem;
     border-radius: 8px;
     color: #4ade80;
-    font-weight: 600;
+    font-weight: 700;
     text-align: center;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
 }
 
-[data-testid="stSidebar"] { background: #111827 !important; }
-[data-testid="stSidebar"] .stRadio > div { background: #1f2937 !important; border-radius: 8px; padding: 0.5rem; }
-[data-testid="stSidebar"] label { color: #e5e7eb !important; font-size: 0.875rem !important; }
-
-.stTabs [data-baseweb="tab-list"] { gap: 0 !important; border-bottom: 1px solid #374151 !important; }
-.stTabs [data-baseweb="tab"] { padding: 1rem 1.5rem !important; font-weight: 600 !important; color: #9ca3af !important; }
-.stTabs [aria-selected="true"] { color: #4ade80 !important; border-bottom-color: #4ade80 !important; }
+.timezone-info {
+    color: #64748b;
+    font-size: 0.75rem;
+    text-align: center;
+    margin-top: 0.25rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -205,15 +371,6 @@ def get_ci_status(ci):
 
 def calculate_co2(kwh, ci):
     return (safe_float(kwh,0) * safe_float(ci,0)) / 1000.0
-
-def get_current_time():
-    now = datetime.now()
-    minutes = (now.minute // 15) * 15
-    return f"{now.hour:02d}:{minutes:02d}"
-
-def get_current_time_exact():
-    now = datetime.now()
-    return f"{now.hour:02d}:{now.minute:02d}"
 
 def validate_time_format(time_str):
     try:
@@ -318,7 +475,7 @@ def find_ci_at_time(full_day_ci, time_str):
     return None
 
 # ============================================================
-# Session state
+# Session state initialization
 # ============================================================
 if "appliance" not in st.session_state:
     st.session_state.appliance = "Water Motor"
@@ -326,142 +483,320 @@ if "appliance" not in st.session_state:
     st.session_state.duration = 30
     st.session_state.deadline = "08:00"
     st.session_state.selected_window = 0
+    st.session_state.location_mode = "Auto-Detect"
+    st.session_state.selected_region = "India"
+    st.session_state.selected_zone = "North India (NR)"
+    st.session_state.lat = 28.6139
+    st.session_state.lon = 77.2090
+    st.session_state.timezone = "Asia/Kolkata"
+    st.session_state.data_source = "Automatic (API)"
 
 # ============================================================
 # Hero Section
 # ============================================================
 st.markdown("""
 <div class="hero">
-    <h1>🌱 CarbonWise</h1>
-    <p>Intelligent carbon intensity optimization for smart homes. Schedule appliances during low-carbon periods.</p>
-    <span class="badge-success">⚡ Live Grid Optimization Active</span>
+    <h1>🌍 CarbonWise</h1>
+    <p>Location-aware carbon intensity optimization. Automatically detects your grid region and optimizes appliance scheduling for minimal CO₂ impact.</p>
+    <div style="margin-top: 1rem;">
+        <span class="badge-success">⚡ Live Grid Optimization</span>
+        <span style="margin-left: 0.5rem; color: #64748b; font-size: 0.9rem;">Powered by Electricity Maps & System Time</span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# Sidebar
+# Sidebar - Location & Configuration
 # ============================================================
 with st.sidebar:
     st.title("⚙️ Configuration")
-
-    current_time_now = get_current_time_exact()
+    
+    # ==================== LOCATION SECTION ====================
+    st.markdown("### 📍 Location Settings")
+    
+    location_mode = st.radio(
+        "Location Mode",
+        ["Auto-Detect", "Manual Select", "Custom Coordinates"],
+        index=["Auto-Detect", "Manual Select", "Custom Coordinates"].index(st.session_state.location_mode),
+        help="Auto-Detect uses IP geolocation. Manual Select lets you choose your grid zone."
+    )
+    st.session_state.location_mode = location_mode
+    
+    detected_location = None
+    
+    if location_mode == "Auto-Detect":
+        if st.button("🔍 Detect My Location", use_container_width=True):
+            with st.spinner("Detecting location..."):
+                detected_location = detect_location_ip()
+                if detected_location:
+                    st.session_state.lat = detected_location["lat"]
+                    st.session_state.lon = detected_location["lon"]
+                    st.session_state.timezone = detected_location.get("timezone", "UTC")
+                    st.success(f"📍 {detected_location['city']}, {detected_location['country']}")
+                    st.rerun()
+                else:
+                    st.error("Detection failed. Switch to Manual Select.")
+        
+        # Show current coordinates
+        st.markdown(f"""
+        <div style="background: #1f2937; padding: 0.75rem; border-radius: 8px; margin-top: 0.5rem;">
+            <div style="color: #94a3b8; font-size: 0.75rem;">Current Coordinates</div>
+            <div style="color: #4ade80; font-size: 0.875rem; font-weight: 600;">
+                {st.session_state.lat:.4f}, {st.session_state.lon:.4f}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    elif location_mode == "Manual Select":
+        selected_region = st.selectbox(
+            "Region", 
+            list(GRID_ZONES.keys()),
+            index=list(GRID_ZONES.keys()).index(st.session_state.selected_region) if st.session_state.selected_region in GRID_ZONES else 0
+        )
+        st.session_state.selected_region = selected_region
+        
+        zones = GRID_ZONES[selected_region]["zones"]
+        selected_zone = st.selectbox(
+            "Grid Zone",
+            list(zones.keys()),
+            index=list(zones.keys()).index(st.session_state.selected_zone) if st.session_state.selected_zone in zones else 0
+        )
+        st.session_state.selected_zone = selected_zone
+        
+        zone_data = zones[selected_zone]
+        st.session_state.lat = zone_data["lat"]
+        st.session_state.lon = zone_data["lon"]
+        st.session_state.timezone = GRID_ZONES[selected_region]["timezone"]
+        
+        st.markdown(f"""
+        <div style="background: #1f2937; padding: 0.75rem; border-radius: 8px; margin-top: 0.5rem;">
+            <div style="color: #94a3b8; font-size: 0.75rem;">Grid Zone Info</div>
+            <div style="color: #4ade80; font-size: 0.875rem; font-weight: 600;">
+                Avg CI: {zone_data['ci_avg']} gCO₂/kWh
+            </div>
+            <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">
+                {GRID_ZONES[selected_region]["voltage"]}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    else:  # Custom Coordinates
+        lat_col, lon_col = st.columns(2)
+        with lat_col:
+            st.session_state.lat = st.number_input("Latitude", -90.0, 90.0, value=st.session_state.lat, format="%.4f")
+        with lon_col:
+            st.session_state.lon = st.number_input("Longitude", -180.0, 180.0, value=st.session_state.lon, format="%.4f")
+        
+        tz_options = pytz.common_timezones
+        current_tz = st.session_state.timezone if st.session_state.timezone in tz_options else "UTC"
+        st.session_state.timezone = st.selectbox("Timezone", tz_options, index=tz_options.index(current_tz) if current_tz in tz_options else 0)
+    
+    # Display Location Badge
+    location_display = st.session_state.selected_zone if location_mode == "Manual Select" else f"{st.session_state.lat:.2f}, {st.session_state.lon:.2f}"
     st.markdown(f"""
-    <div class="live-time">
-        🕐 Current Time: <strong>{current_time_now}</strong>
+    <div style="margin-top: 1rem;">
+        <span class="location-badge">🌍 {location_display}</span>
     </div>
     """, unsafe_allow_html=True)
     
     st.divider()
-
-    st.subheader("📁 Data Source")
-    data_mode = st.radio("Select Mode", ["Sample Data", "Upload CSV"], index=0, label_visibility="collapsed")
-    uploaded = None
-    if data_mode == "Upload CSV":
-        uploaded = st.file_uploader("Upload CSV file", type=["csv"])
-
+    
+    # ==================== TIME DISPLAY ====================
+    current_time_exact = get_current_time_exact(st.session_state.timezone)
+    current_time_rounded = get_current_time(st.session_state.timezone, STEP_MIN)
+    
+    st.markdown(f"""
+    <div class="live-time">
+        🕐 {current_time_exact}
+    </div>
+    <div class="timezone-info">
+        System Time ({st.session_state.timezone})<br>
+        Rounded: {current_time_rounded} (15-min intervals)
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.divider()
-
+    
+    # ==================== DATA SOURCE ====================
+    st.subheader("📁 Data Source")
+    
+    data_source = st.radio(
+        "Select Mode",
+        ["Automatic (API)", "Sample Data", "Upload CSV (Admin)"],
+        index=["Automatic (API)", "Sample Data", "Upload CSV (Admin)"].index(st.session_state.data_source) if st.session_state.data_source in ["Automatic (API)", "Sample Data", "Upload CSV (Admin)"] else 0,
+        help="Automatic fetches real-time data from Electricity Maps. Sample uses synthetic data. Upload CSV for manual admin entry."
+    )
+    st.session_state.data_source = data_source
+    
+    uploaded_file = None
+    api_token = None
+    
+    if data_source == "Automatic (API)":
+        st.info("🌐 Fetches real-time grid data based on your location")
+        api_token = st.text_input("Electricity Maps API Token (Optional)", type="password", help="Free tier token for higher rate limits")
+        if st.button("🔄 Refresh Grid Data", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+            
+    elif data_source == "Upload CSV (Admin)":
+        st.warning("👤 Admin Mode: Upload grid generation data")
+        uploaded_file = st.file_uploader("Upload CSV", type=["csv"], help="Required: time, thermal_mw, hydro_mw, nuclear_mw, res_mw")
+        
+        with st.expander("📋 CSV Format Guide"):
+            st.markdown("""
+            **Required Columns:**
+            - `time`: HH:MM format (00:00 to 23:45)
+            - `thermal_mw`: Thermal generation in MW
+            - `hydro_mw`: Hydro generation in MW  
+            - `nuclear_mw`: Nuclear generation in MW
+            - `res_mw`: Renewable generation in MW
+            
+            **Optional:**
+            - `ci`: Pre-calculated carbon intensity (gCO₂/kWh)
+            """)
+    
+    st.divider()
+    
+    # ==================== APPLIANCE SETTINGS ====================
     st.subheader("🔌 Appliance Settings")
+    
     appliance = st.selectbox("Select Appliance", list(APPLIANCES.keys()), label_visibility="collapsed")
-
+    
     if appliance != st.session_state.appliance:
         info = APPLIANCES[appliance]
         st.session_state.kw = info["kw"]
         st.session_state.duration = info["duration_min"]
         st.session_state.deadline = info["deadline"]
         st.session_state.appliance = appliance
-
+    
     kw = st.number_input("Power (kW)", 0.001, value=float(st.session_state.kw), step=0.05, format="%.3f")
     duration = st.number_input("Duration (minutes)", 15, value=int(st.session_state.duration), step=15)
     
     deadline = st.text_input("Deadline (HH:MM)", value=st.session_state.deadline, 
-                             help="Windows will be suggested from NOW until this time.")
+                             help=f"Latest time to finish (System time: {st.session_state.timezone})")
     
     if not validate_time_format(deadline):
         st.error("⚠️ Invalid format. Use HH:MM")
         deadline = st.session_state.deadline
     else:
         st.session_state.deadline = deadline
-
-    now_mins = time_to_minutes(get_current_time())
+    
+    # Calculate available time
+    now_mins = time_to_minutes(current_time_rounded)
     deadline_mins = time_to_minutes(deadline)
     
     if deadline_mins > now_mins:
         available_mins = deadline_mins - now_mins
     else:
         available_mins = (1440 - now_mins) + deadline_mins
-
+    
     st.info(f"⏱️ Available: **{available_mins} min** ({available_mins//60}h {available_mins%60}m)")
-
+    
     if st.button("🔄 Reset to Default"):
         info = APPLIANCES[appliance]
         st.session_state.kw = info["kw"]
         st.session_state.duration = info["duration_min"]
         st.session_state.deadline = info["deadline"]
         st.rerun()
-
+    
     st.divider()
-
+    
+    # ==================== OPTIMIZATION ====================
     st.subheader("⚡ Optimization")
     top_k = st.slider("Top Recommendations", 3, 12, 5)
-
+    
     st.session_state.kw = kw
     st.session_state.duration = duration
 
-now_time = get_current_time()
-
 # ============================================================
-# Load data
+# Data Loading Logic
 # ============================================================
 @st.cache_data(ttl=300)
-def load_data(mode, uploaded_file):
-    if mode == "Sample Data":
-        DATA_DIR.mkdir(exist_ok=True)
-        sample_file = DATA_DIR / "sample.csv"
-        if not sample_file.exists():
-            data = []
-            for h in range(24):
-                for m in [0, 15, 30, 45]:
-                    t = f"{h:02d}:{m:02d}"
-                    if 0 <= h < 5: thermal = 1000
-                    elif 5 <= h < 8: thermal = 2000
-                    elif 8 <= h < 12: thermal = 4000
-                    elif 12 <= h < 17: thermal = 5000
-                    elif 17 <= h < 21: thermal = 4500
-                    else: thermal = 2500
+def load_data_auto(lat: float, lon: float, api_token: Optional[str] = None) -> Optional[pd.DataFrame]:
+    """Load data from Electricity Maps API"""
+    return fetch_electricity_maps_data(lat, lon, api_token)
 
-                    data.append({
-                        "time": t,
-                        "thermal_mw": thermal,
-                        "hydro_mw": 1500,
-                        "nuclear_mw": 2000,
-                        "res_mw": 800 + (1200 if 10 <= h <= 16 else 0)
-                    })
-            pd.DataFrame(data).to_csv(sample_file, index=False)
-        return pd.read_csv(sample_file)
-    else:
-        if uploaded_file:
-            return pd.read_csv(uploaded_file)
+@st.cache_data(ttl=300)
+def load_data_sample() -> pd.DataFrame:
+    """Generate sample data based on typical grid patterns"""
+    DATA_DIR.mkdir(exist_ok=True)
+    sample_file = DATA_DIR / "sample.csv"
+    
+    if not sample_file.exists():
+        data = []
+        for h in range(24):
+            for m in [0, 15, 30, 45]:
+                t = f"{h:02d}:{m:02d}"
+                # Simulate realistic daily load curve
+                base_load = 3000
+                if 0 <= h < 5: load_factor = 0.6      # Night
+                elif 5 <= h < 8: load_factor = 0.8      # Morning ramp
+                elif 8 <= h < 12: load_factor = 1.0     # Business hours
+                elif 12 <= h < 17: load_factor = 1.1    # Afternoon peak
+                elif 17 <= h < 21: load_factor = 1.2     # Evening peak
+                else: load_factor = 0.9                  # Late evening
+                
+                thermal = int(base_load * load_factor * 0.6)  # 60% thermal
+                hydro = 1500                                  # Base hydro
+                nuclear = 2000                                # Base nuclear
+                res = int(800 + (1200 if 10 <= h <= 16 else 0))  # Solar peak
+                
+                data.append({
+                    "time": t,
+                    "thermal_mw": thermal,
+                    "hydro_mw": hydro,
+                    "nuclear_mw": nuclear,
+                    "res_mw": res
+                })
+        pd.DataFrame(data).to_csv(sample_file, index=False)
+    
+    return pd.read_csv(sample_file)
+
+def load_data_uploaded(file) -> Optional[pd.DataFrame]:
+    """Load admin-uploaded CSV data"""
+    try:
+        df = pd.read_csv(file)
+        required = {"time", "thermal_mw", "hydro_mw", "nuclear_mw", "res_mw"}
+        missing = required - set(df.columns)
+        if missing:
+            st.error(f"Missing columns: {', '.join(missing)}")
+            return None
+        return df
+    except Exception as e:
+        st.error(f"Error reading CSV: {e}")
         return None
 
-raw = load_data(data_mode, uploaded)
+# Load data based on selected mode
+raw = None
+if st.session_state.data_source == "Automatic (API)":
+    with st.spinner("🌐 Fetching real-time grid data..."):
+        raw = load_data_auto(st.session_state.lat, st.session_state.lon, api_token)
+    if raw is None:
+        st.warning("⚠️ API fetch failed. Falling back to sample data.")
+        raw = load_data_sample()
+        
+elif st.session_state.data_source == "Sample Data":
+    raw = load_data_sample()
+    
+else:  # Upload CSV
+    if uploaded_file:
+        raw = load_data_uploaded(uploaded_file)
+    else:
+        st.info("👤 Please upload a CSV file or switch to Automatic/Sample mode")
+        st.stop()
 
-if raw is None:
-    st.error("❌ Please upload a CSV file or select Sample Data")
+if raw is None or raw.empty:
+    st.error("❌ No data available. Please check your data source.")
     st.stop()
 
-required = {"time", "thermal_mw", "hydro_mw", "nuclear_mw", "res_mw"}
-missing = required - set(raw.columns)
-if missing:
-    st.error(f"❌ Missing columns: {', '.join(missing)}")
-    st.stop()
-
-raw["ci"] = raw.apply(lambda r: compute_ci_g_per_kwh(
-    safe_float(r["thermal_mw"]),
-    safe_float(r["hydro_mw"]),
-    safe_float(r["nuclear_mw"]),
-    safe_float(r["res_mw"])
-), axis=1)
+# Calculate CI if not present
+if "ci" not in raw.columns:
+    raw["ci"] = raw.apply(lambda r: compute_ci_g_per_kwh(
+        safe_float(r["thermal_mw"]),
+        safe_float(r["hydro_mw"]),
+        safe_float(r["nuclear_mw"]),
+        safe_float(r["res_mw"])
+    ), axis=1)
 
 df_ci = raw[["time", "ci"]].dropna().sort_values("time").reset_index(drop=True)
 
@@ -469,7 +804,13 @@ if len(df_ci) < 4:
     st.error("❌ Insufficient data points")
     st.stop()
 
+# Generate full day CI data with 15-min intervals
 full_day_ci = make_full_day_ci(df_ci)
+
+# Get current time based on system timezone
+now_time = get_current_time(st.session_state.timezone, STEP_MIN)
+
+# Find recommendations
 windows = recommend_windows(full_day_ci, duration, deadline, top_k, now_time)
 
 current_ci = find_ci_at_time(full_day_ci, now_time)
@@ -490,27 +831,27 @@ kpi_cols = st.columns(5)
 with kpi_cols[0]:
     st.markdown(f"""
     <div class="kpi">
-        <div class="metric-label">🕐 Now</div>
-        <div class="metric-value">{now_time}</div>
-        <div class="metric-sub">Live time</div>
+        <div class="metric-label">🌍 Location</div>
+        <div class="metric-value" style="font-size: 1.2rem;">{st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else "Auto-Detected"}</div>
+        <div class="metric-sub">{st.session_state.timezone}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True")
 
 with kpi_cols[1]:
     st.markdown(f"""
     <div class="kpi">
-        <div class="metric-label">🔌 Appliance</div>
-        <div class="metric-value" style="font-size: 1.2rem;">{appliance.split('/')[0].strip()}</div>
-        <div class="metric-sub">{kw:.2f} kW</div>
+        <div class="metric-label">🕐 System Time</div>
+        <div class="metric-value">{now_time}</div>
+        <div class="metric-sub">Live ({st.session_state.data_source.split(' ')[0]})</div>
     </div>
     """, unsafe_allow_html=True)
 
 with kpi_cols[2]:
     st.markdown(f"""
     <div class="kpi">
-        <div class="metric-label">⏱️ Duration</div>
-        <div class="metric-value">{ceil_to_step(duration)} min</div>
-        <div class="metric-sub">Deadline: {deadline}</div>
+        <div class="metric-label">🔌 Appliance</div>
+        <div class="metric-value" style="font-size: 1.2rem;">{appliance.split('/')[0].strip()}</div>
+        <div class="metric-sub">{kw:.2f} kW • {ceil_to_step(duration)} min</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -537,7 +878,7 @@ with kpi_cols[4]:
 st.markdown("---")
 
 # ============================================================
-# Tabs
+# Tabs (Content remains similar but with location context)
 # ============================================================
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 Dashboard", "🎯 Smart Advisor", "📊 Analytics", "📝 Logger", "🔍 Data"])
 
@@ -546,7 +887,7 @@ with tab1:
     dash_cols = st.columns([2, 1])
     
     with dash_cols[0]:
-        st.subheader("24-Hour Carbon Intensity Forecast")
+        st.subheader(f"24-Hour Carbon Intensity Forecast • {st.session_state.timezone}")
         
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -555,13 +896,16 @@ with tab1:
             fill='tozeroy',
             fillcolor='rgba(74, 222, 128, 0.1)',
             line=dict(color='#4ade80', width=3),
-            hovertemplate='Time: %{x}<br>CI: %{y:.1f} gCO₂/kWh<extra></extra>'
+            hovertemplate='Time: %{x}<br>CI: %{y:.1f} gCO₂/kWh<extra></extra>',
+            name='Carbon Intensity'
         ))
         
-        fig.add_hrect(y0=0, y1=200, fillcolor="#4ade80", opacity=0.05, line_width=0)
-        fig.add_hrect(y0=200, y1=400, fillcolor="#fbbf24", opacity=0.05, line_width=0)
-        fig.add_hrect(y0=400, y1=800, fillcolor="#f87171", opacity=0.05, line_width=0)
+        # Add reference bands
+        fig.add_hrect(y0=0, y1=200, fillcolor="#4ade80", opacity=0.05, line_width=0, name="Low")
+        fig.add_hrect(y0=200, y1=400, fillcolor="#fbbf24", opacity=0.05, line_width=0, name="Medium")
+        fig.add_hrect(y0=400, y1=800, fillcolor="#f87171", opacity=0.05, line_width=0, name="High")
         
+        # Highlight recommendation windows
         if windows:
             for i, w in enumerate(windows[:3]):
                 fig.add_vrect(
@@ -571,14 +915,14 @@ with tab1:
                     opacity=0.25,
                     line_width=2 if i == 0 else 1,
                     line_color=w["color"],
-                    layer="below"
+                    layer="below",
+                    name=f"Window {i+1}"
                 )
         
-        # Add vertical lines WITHOUT annotation_text parameter
+        # Current time and deadline markers
         fig.add_vline(x=now_time, line_dash="dash", line_color="#4ade80", line_width=2)
         fig.add_vline(x=deadline, line_dash="dash", line_color="#f87171", line_width=2)
         
-        # Add annotations separately
         max_ci_val = max(full_day_ci["ci"]) * 1.05
         fig.add_annotation(x=now_time, y=max_ci_val, text="NOW", showarrow=False, 
                           font=dict(color="#4ade80", size=11))
@@ -590,10 +934,13 @@ with tab1:
             paper_bgcolor="#0f172a",
             font=dict(color="#f8fafc"),
             xaxis=dict(gridcolor="#334155", title="Time of Day", tickangle=-45, nticks=12),
-            yaxis=dict(gridcolor="#334155", title="Carbon Intensity (gCO₂/kWh)", range=[0, max(full_day_ci["ci"]) * 1.15]),
+            yaxis=dict(gridcolor="#334155", title="Carbon Intensity (gCO₂/kWh)", 
+                      range=[0, max(full_day_ci["ci"]) * 1.15]),
             height=450,
             margin=dict(l=60, r=40, t=40, b=60),
-            showlegend=False
+            showlegend=False,
+            title=dict(text=f"Location: {st.session_state.lat:.2f}°N, {st.session_state.lon:.2f}°E", 
+                      font=dict(size=12, color="#64748b"))
         )
         st.plotly_chart(fig, use_container_width=True)
     
@@ -601,7 +948,8 @@ with tab1:
         st.subheader("Current Grid Mix")
         
         latest = raw.iloc[-1]
-        total = safe_float(latest["thermal_mw"]) + safe_float(latest["hydro_mw"]) + safe_float(latest["nuclear_mw"]) + safe_float(latest["res_mw"])
+        total = safe_float(latest["thermal_mw"]) + safe_float(latest["hydro_mw"]) + \
+                safe_float(latest["nuclear_mw"]) + safe_float(latest["res_mw"])
         
         mix_data = pd.DataFrame({
             "Source": ["Thermal", "Hydro", "Nuclear", "Renewable"],
@@ -638,10 +986,18 @@ with tab1:
 
 # ================== TAB 2: Smart Advisor ==================
 with tab2:
-    st.subheader(f"🏆 Top {top_k} Windows ({now_time} → {deadline})")
+    st.subheader(f"🏆 Top {top_k} Windows ({now_time} → {deadline}) • {st.session_state.timezone}")
     
     if not windows:
         st.warning(f"⚠️ No valid windows found! Try extending deadline or reducing duration.")
+        # Show why
+        st.info(f"""
+        **Debug Info:**
+        - Current time: {now_time}
+        - Deadline: {deadline}
+        - Duration: {ceil_to_step(duration)} minutes
+        - Available window: {available_mins} minutes
+        """)
     else:
         for row_start in range(0, len(windows), 3):
             row_windows = windows[row_start:row_start + 3]
@@ -696,8 +1052,6 @@ with tab2:
 with tab3:
     st.subheader("📊 Baseline vs Optimized")
     
-    log_df = read_log()
-    
     hours = ceil_to_step(duration) / 60
     energy = float(kw) * hours
     co2_now = calculate_co2(energy, current_ci)
@@ -705,7 +1059,17 @@ with tab3:
     projected_savings = co2_now - co2_best
     savings_pct = (projected_savings / co2_now * 100) if co2_now > 0 else 0
     
-    # Combined comparison chart
+    # Location context
+    st.markdown(f"""
+    <div style="background: #1e293b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+        <div style="color: #94a3b8; font-size: 0.875rem;">Location Context</div>
+        <div style="color: white; font-size: 1rem;">
+            {st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else f"Lat: {st.session_state.lat:.2f}, Lon: {st.session_state.lon:.2f}"} 
+            • {st.session_state.timezone} • Data: {st.session_state.data_source}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     fig_comp = go.Figure()
     fig_comp.add_trace(go.Bar(
         name='Baseline (Now)',
@@ -740,27 +1104,28 @@ with tab3:
     )
     st.plotly_chart(fig_comp, use_container_width=True)
     
-    # Stats
     stat_cols = st.columns(3)
     with stat_cols[0]:
-        st.metric("🔴 Baseline", f"{co2_now:.3f} kg", help=f"CI={current_ci:.0f}")
+        st.metric("🔴 Baseline", f"{co2_now:.3f} kg", help=f"CI={current_ci:.0f} at {now_time}")
     with stat_cols[1]:
         st.metric("🟢 Optimized", f"{co2_best:.3f} kg", help=f"CI={best['avg_ci']:.0f}" if best else "N/A")
     with stat_cols[2]:
         st.metric("💰 Savings", f"{savings_pct:.1f}%", delta=f"-{projected_savings:.3f} kg", delta_color="inverse")
     
-    # Show logged data if exists
+    log_df = read_log()
     if len(log_df) > 0:
         with st.expander("📋 Run History"):
-            st.dataframe(log_df.sort_values("date" if "date" in log_df.columns else "timestamp", ascending=False), 
+            st.dataframe(log_df.sort_values("timestamp", ascending=False), 
                         use_container_width=True, hide_index=True)
 
 # ================== TAB 4: Logger ==================
 with tab4:
-    ensure_log_file()
+    ensure_dirs()
     st.subheader("📝 Log Appliance Run")
     
     with st.form("run_form"):
+        st.markdown(f"**System Time:** {get_current_time_exact(st.session_state.timezone)} ({st.session_state.timezone})")
+        
         form_cols = st.columns(3)
         with form_cols[0]:
             run_date = st.date_input("Date", datetime.now())
@@ -771,7 +1136,7 @@ with tab4:
             run_duration = st.number_input("Duration (min)", 15, value=ceil_to_step(int(duration)), step=15)
         with form_cols[2]:
             run_appliance = st.selectbox("Appliance", list(APPLIANCES.keys()))
-            notes = st.text_input("Notes")
+            notes = st.text_input("Notes", f"Location: {st.session_state.selected_zone if st.session_state.location_mode == 'Manual Select' else 'Auto'}")
         
         meter_cols = st.columns(2)
         with meter_cols[0]:
@@ -806,25 +1171,51 @@ with tab4:
                     "kwh_used": round(float(kwh_used), 4),
                     "avg_ci_g_per_kwh": round(float(avg_ci), 2),
                     "co2_kg": round(float(co2_out), 4),
+                    "location_zone": st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else f"{st.session_state.lat:.2f},{st.session_state.lon:.2f}",
+                    "timezone": st.session_state.timezone,
                     "notes": notes
                 }
                 
                 append_log(row)
                 read_log.clear()
-                st.success(f"✅ Saved! {kwh_used:.3f} kWh, {co2_out:.4f} kg CO₂")
+                st.success(f"✅ Saved! {kwh_used:.3f} kWh, {co2_out:.4f} kg CO₂ at {st.session_state.timezone}")
                 if run_type == "recommended":
                     st.balloons()
 
 # ================== TAB 5: Data ==================
 with tab5:
-    st.subheader("🔍 Raw Data")
+    st.subheader("🔍 Raw Data & Configuration")
     
+    # Show location config
+    with st.expander("📍 Current Location Configuration"):
+        config_data = {
+            "Mode": st.session_state.location_mode,
+            "Region": st.session_state.selected_region if st.session_state.location_mode == "Manual Select" else "N/A",
+            "Zone": st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else "N/A",
+            "Latitude": st.session_state.lat,
+            "Longitude": st.session_state.lon,
+            "Timezone": st.session_state.timezone,
+            "Data Source": st.session_state.data_source
+        }
+        st.json(config_data)
+        
+        if st.button("💾 Save Config"):
+            save_location_config(config_data)
+            st.success("Configuration saved!")
+    
+    # Show raw data
     show_cols = ["time", "thermal_mw", "hydro_mw", "nuclear_mw", "res_mw", "ci"]
     show_cols = [c for c in show_cols if c in raw.columns]
     
     st.dataframe(raw[show_cols].sort_values("time"), use_container_width=True, hide_index=True)
     
-    st.download_button("📥 Download CSV", 
-                       data=raw[show_cols].to_csv(index=False).encode("utf-8"),
-                       file_name="carbonwise_data.csv",
-                       mime="text/csv")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button("📥 Download CSV", 
+                           data=raw[show_cols].to_csv(index=False).encode("utf-8"),
+                           file_name=f"carbonwise_{st.session_state.lat:.2f}_{st.session_state.lon:.2f}.csv",
+                           mime="text/csv")
+    with col2:
+        if st.button("🔄 Refresh Data"):
+            st.cache_data.clear()
+            st.rerun()
