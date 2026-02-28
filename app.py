@@ -136,16 +136,53 @@ def get_system_time(timezone_str: str = "UTC") -> datetime:
     except:
         return datetime.now()
 
+def format_time_12hour(hour: int, minute: int) -> str:
+    """Convert 24-hour format to 12-hour format with AM/PM"""
+    period = "AM" if hour < 12 else "PM"
+    hour_12 = hour % 12
+    if hour_12 == 0:
+        hour_12 = 12
+    return f"{hour_12}:{minute:02d} {period}"
+
 def get_current_time(timezone_str: str = "UTC", step: int = 15) -> str:
-    """Get current time rounded to nearest step in HH:MM format"""
+    """Get current time rounded to nearest step in 12-hour format"""
     now = get_system_time(timezone_str)
     minutes = (now.minute // step) * step
-    return f"{now.hour:02d}:{minutes:02d}"
+    return format_time_12hour(now.hour, minutes)
 
 def get_current_time_exact(timezone_str: str = "UTC") -> str:
-    """Get exact current time in HH:MM:SS format"""
+    """Get exact current time in 12-hour format with seconds"""
     now = get_system_time(timezone_str)
-    return f"{now.hour:02d}:{now.minute:02d}:{now.second:02d}"
+    period = "AM" if now.hour < 12 else "PM"
+    hour_12 = now.hour % 12
+    if hour_12 == 0:
+        hour_12 = 12
+    return f"{hour_12}:{now.minute:02d}:{now.second:02d} {period}"
+
+def convert_to_24hour(time_str: str) -> str:
+    """Convert 12-hour format (HH:MM AM/PM) to 24-hour format (HH:MM)"""
+    try:
+        time_str = time_str.strip()
+        if "AM" in time_str.upper() or "PM" in time_str.upper():
+            is_pm = "PM" in time_str.upper()
+            time_part = time_str.upper().replace("AM", "").replace("PM", "").strip()
+            hour, minute = map(int, time_part.split(":"))
+            if is_pm and hour != 12:
+                hour += 12
+            elif not is_pm and hour == 12:
+                hour = 0
+            return f"{hour:02d}:{minute:02d}"
+        return time_str
+    except:
+        return time_str
+
+def convert_to_12hour(time_str: str) -> str:
+    """Convert 24-hour format (HH:MM) to 12-hour format (HH:MM AM/PM)"""
+    try:
+        hour, minute = map(int, time_str.split(":"))
+        return format_time_12hour(hour, minute)
+    except:
+        return time_str
 
 def detect_location_ip() -> Optional[Dict]:
     """Attempt to detect location via IP geolocation (free service)"""
@@ -173,7 +210,6 @@ def fetch_electricity_maps_data(lat: float, lon: float, api_token: Optional[str]
         if api_token:
             headers["auth-token"] = api_token
         
-        # Get current carbon intensity
         url = f"{ELECTRICITY_MAPS_API}carbon-intensity/latest"
         params = {"lat": lat, "lon": lon}
         
@@ -183,7 +219,6 @@ def fetch_electricity_maps_data(lat: float, lon: float, api_token: Optional[str]
             data = response.json()
             ci = data.get("carbonIntensity", 400)
             
-            # Generate 24h forecast based on typical daily patterns
             times, cis = [], []
             base_ci = ci
             
@@ -226,7 +261,7 @@ def fetch_electricity_maps_data(lat: float, lon: float, api_token: Optional[str]
 st.set_page_config(page_title="CarbonWise | Location-Aware", page_icon="🌍", layout="wide")
 
 # ============================================================
-# Enhanced CSS Styles
+# Enhanced CSS Styles - Fixed to remove text overlap
 # ============================================================
 st.markdown("""
 <style>
@@ -236,12 +271,17 @@ st.markdown("""
 
 .main { background-color: #0a0e17; }
 
+/* Hide any unwanted text at top */
+header { visibility: hidden; }
+.stApp > header { display: none; }
+
 .hero { 
     background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); 
     padding: 2rem; 
     border-radius: 16px; 
     margin-bottom: 2rem;
     border: 1px solid rgba(74, 222, 128, 0.2);
+    margin-top: -60px;
 }
 .hero h1 { 
     color: #4ade80; 
@@ -274,16 +314,18 @@ st.markdown("""
     border-radius: 12px; 
     text-align: center; 
     border-left: 4px solid #4ade80;
+    min-height: 120px;
 }
 .metric-value { 
-    font-size: 1.75rem; 
+    font-size: 1.5rem; 
     font-weight: 800; 
     color: white;
     margin-top: 0.5rem;
+    word-wrap: break-word;
 }
 .metric-label { 
     color: #94a3b8; 
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-weight: 600;
@@ -316,6 +358,19 @@ st.markdown("""
     font-size: 0.75rem;
     text-align: center;
     margin-top: 0.25rem;
+}
+
+/* Fix overlapping elements */
+.stTabs [data-baseweb="tab-panel"] {
+    padding-top: 1rem;
+}
+.stMetric {
+    background: #1e293b;
+    padding: 1rem;
+    border-radius: 8px;
+}
+.stMetric > div {
+    overflow: visible;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -372,20 +427,40 @@ def calculate_co2(kwh, ci):
 
 def validate_time_format(time_str):
     try:
-        h, m = map(int, time_str.split(":"))
-        return 0 <= h < 24 and 0 <= m < 60
+        # Support both 12-hour and 24-hour formats
+        time_str = time_str.strip().upper()
+        if "AM" in time_str or "PM" in time_str:
+            time_part = time_str.replace("AM", "").replace("PM", "").strip()
+            h, m = map(int, time_part.split(":"))
+            return 1 <= h <= 12 and 0 <= m < 60
+        else:
+            h, m = map(int, time_str.split(":"))
+            return 0 <= h < 24 and 0 <= m < 60
     except:
         return False
 
 def time_to_minutes(time_str):
     try:
-        h, m = map(int, time_str.split(":"))
-        return h * 60 + m
+        time_str = time_str.strip().upper()
+        if "AM" in time_str or "PM" in time_str:
+            is_pm = "PM" in time_str
+            time_part = time_str.replace("AM", "").replace("PM", "").strip()
+            h, m = map(int, time_part.split(":"))
+            if is_pm and h != 12:
+                h += 12
+            elif not is_pm and h == 12:
+                h = 0
+            return h * 60 + m
+        else:
+            h, m = map(int, time_str.split(":"))
+            return h * 60 + m
     except:
         return 0
 
 def minutes_to_time(mins):
-    return f"{(mins // 60) % 24:02d}:{mins % 60:02d}"
+    hour = (mins // 60) % 24
+    minute = mins % 60
+    return format_time_12hour(hour, minute)
 
 def make_full_day_ci(df_ci):
     times, cis = [], []
@@ -409,17 +484,8 @@ def recommend_windows(full_day_ci, duration_min, deadline, top_k, now_time):
     duration_min = ceil_to_step(duration_min, STEP_MIN)
     n_slots = duration_min // STEP_MIN
 
-    try:
-        dh, dm = map(int, deadline.split(":"))
-        deadline_mins = dh * 60 + dm
-    except:
-        deadline_mins = 23 * 60 + 59
-
-    try:
-        nh, nm = map(int, now_time.split(":"))
-        now_mins = nh * 60 + nm
-    except:
-        now_mins = 0
+    deadline_mins = time_to_minutes(deadline)
+    now_mins = time_to_minutes(now_time)
 
     if deadline_mins <= now_mins:
         deadline_mins += 1440
@@ -467,7 +533,9 @@ def recommend_windows(full_day_ci, duration_min, deadline, top_k, now_time):
     return windows[:top_k]
 
 def find_ci_at_time(full_day_ci, time_str):
-    mask = full_day_ci["time"] == time_str
+    # Convert 12-hour input to 24-hour for lookup
+    time_24 = convert_to_24hour(time_str)
+    mask = full_day_ci["time"] == time_24
     if mask.any():
         return float(full_day_ci[mask]["ci"].iloc[0])
     return None
@@ -479,7 +547,7 @@ if "appliance" not in st.session_state:
     st.session_state.appliance = "Water Motor"
     st.session_state.kw = 0.75
     st.session_state.duration = 30
-    st.session_state.deadline = "08:00"
+    st.session_state.deadline = "08:00 AM"
     st.session_state.selected_window = 0
     st.session_state.location_mode = "Auto-Detect"
     st.session_state.selected_region = "India"
@@ -497,7 +565,7 @@ st.markdown("""
     <h1>🌍 CarbonWise</h1>
     <p>Location-aware carbon intensity optimization. Automatically detects your grid region and optimizes appliance scheduling for minimal CO₂ impact.</p>
     <div style="margin-top: 1rem;">
-        <span class="badge-success">⚡ Live Grid Optimization</span>
+        <span style="background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.875rem; font-weight: 600;">⚡ Live Grid Optimization</span>
         <span style="margin-left: 0.5rem; color: #64748b; font-size: 0.9rem;">Powered by Electricity Maps & System Time</span>
     </div>
 </div>
@@ -535,6 +603,7 @@ with st.sidebar:
                 else:
                     st.error("Detection failed. Switch to Manual Select.")
         
+        # Show current coordinates
         st.markdown(f"""
         <div style="background: #1f2937; padding: 0.75rem; border-radius: 8px; margin-top: 0.5rem;">
             <div style="color: #94a3b8; font-size: 0.75rem;">Current Coordinates</div>
@@ -588,6 +657,7 @@ with st.sidebar:
         current_tz = st.session_state.timezone if st.session_state.timezone in tz_options else "UTC"
         st.session_state.timezone = st.selectbox("Timezone", tz_options, index=tz_options.index(current_tz) if current_tz in tz_options else 0)
     
+    # Display Location Badge
     location_display = st.session_state.selected_zone if location_mode == "Manual Select" else f"{st.session_state.lat:.2f}, {st.session_state.lon:.2f}"
     st.markdown(f"""
     <div style="margin-top: 1rem;">
@@ -662,21 +732,29 @@ with st.sidebar:
         info = APPLIANCES[appliance]
         st.session_state.kw = info["kw"]
         st.session_state.duration = info["duration_min"]
-        st.session_state.deadline = info["deadline"]
+        # Convert 24h deadline to 12h format
+        h, m = info["deadline"].split(":")
+        h_int = int(h)
+        period = "AM" if h_int < 12 else "PM"
+        h_12 = h_int % 12
+        if h_12 == 0:
+            h_12 = 12
+        st.session_state.deadline = f"{h_12}:{m} {period}"
         st.session_state.appliance = appliance
     
     kw = st.number_input("Power (kW)", 0.001, value=float(st.session_state.kw), step=0.05, format="%.3f")
     duration = st.number_input("Duration (minutes)", 15, value=int(st.session_state.duration), step=15)
     
-    deadline = st.text_input("Deadline (HH:MM)", value=st.session_state.deadline, 
+    deadline = st.text_input("Deadline (HH:MM AM/PM)", value=st.session_state.deadline, 
                              help=f"Latest time to finish (System time: {st.session_state.timezone})")
     
     if not validate_time_format(deadline):
-        st.error("⚠️ Invalid format. Use HH:MM")
+        st.error("⚠️ Invalid format. Use HH:MM AM/PM (e.g., 11:00 AM)")
         deadline = st.session_state.deadline
     else:
         st.session_state.deadline = deadline
     
+    # Calculate available time
     now_mins = time_to_minutes(current_time_rounded)
     deadline_mins = time_to_minutes(deadline)
     
@@ -691,7 +769,13 @@ with st.sidebar:
         info = APPLIANCES[appliance]
         st.session_state.kw = info["kw"]
         st.session_state.duration = info["duration_min"]
-        st.session_state.deadline = info["deadline"]
+        h, m = info["deadline"].split(":")
+        h_int = int(h)
+        period = "AM" if h_int < 12 else "PM"
+        h_12 = h_int % 12
+        if h_12 == 0:
+            h_12 = 12
+        st.session_state.deadline = f"{h_12}:{m} {period}"
         st.rerun()
     
     st.divider()
@@ -822,13 +906,11 @@ if best and current_ci > 0:
 st.markdown("### 📊 Current Session Overview")
 
 kpi_cols = st.columns(5)
-
 with kpi_cols[0]:
-    location_label = st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else "Auto-Detected"
     st.markdown(f"""
     <div class="kpi">
         <div class="metric-label">🌍 Location</div>
-        <div class="metric-value" style="font-size: 1.2rem;">{location_label}</div>
+        <div class="metric-value" style="font-size: 1.1rem;">{st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else "Auto-Detected"}</div>
         <div class="metric-sub">{st.session_state.timezone}</div>
     </div>
     """, unsafe_allow_html=True)
@@ -837,7 +919,7 @@ with kpi_cols[1]:
     st.markdown(f"""
     <div class="kpi">
         <div class="metric-label">🕐 System Time</div>
-        <div class="metric-value">{now_time}</div>
+        <div class="metric-value" style="font-size: 1.2rem;">{now_time}</div>
         <div class="metric-sub">Live ({st.session_state.data_source.split(' ')[0]})</div>
     </div>
     """, unsafe_allow_html=True)
@@ -846,7 +928,7 @@ with kpi_cols[2]:
     st.markdown(f"""
     <div class="kpi">
         <div class="metric-label">🔌 Appliance</div>
-        <div class="metric-value" style="font-size: 1.2rem;">{appliance.split('/')[0].strip()}</div>
+        <div class="metric-value" style="font-size: 1.0rem;">{appliance.split('/')[0].strip()}</div>
         <div class="metric-sub">{kw:.2f} kW • {ceil_to_step(duration)} min</div>
     </div>
     """, unsafe_allow_html=True)
@@ -863,13 +945,12 @@ with kpi_cols[3]:
 
 with kpi_cols[4]:
     best_color = "#4ade80" if best else "#64748b"
-    best_start = best["start"] if best else "--:--"
-    savings_text = f"Save ~{potential_savings:.1f}%" if potential_savings > 0 else "No savings"
+    best_time_display = convert_to_12hour(best["start"]) if best else "--:--"
     st.markdown(f"""
     <div class="kpi" style="border-left-color: {best_color}">
         <div class="metric-label">✨ Best Window</div>
-        <div class="metric-value" style="color: {best_color}">{best_start}</div>
-        <div class="metric-sub">{savings_text}</div>
+        <div class="metric-value" style="color: {best_color}; font-size: 1.2rem;">{best_time_display}</div>
+        <div class="metric-sub">{f"Save ~{potential_savings:.1f}%" if potential_savings > 0 else "No savings"}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -915,13 +996,15 @@ with tab1:
                     name=f"Window {i+1}"
                 )
         
-        fig.add_vline(x=now_time, line_dash="dash", line_color="#4ade80", line_width=2)
-        fig.add_vline(x=deadline, line_dash="dash", line_color="#f87171", line_width=2)
+        now_time_24 = convert_to_24hour(now_time)
+        deadline_24 = convert_to_24hour(deadline)
+        fig.add_vline(x=now_time_24, line_dash="dash", line_color="#4ade80", line_width=2)
+        fig.add_vline(x=deadline_24, line_dash="dash", line_color="#f87171", line_width=2)
         
         max_ci_val = max(full_day_ci["ci"]) * 1.05
-        fig.add_annotation(x=now_time, y=max_ci_val, text="NOW", showarrow=False, 
+        fig.add_annotation(x=now_time_24, y=max_ci_val, text="NOW", showarrow=False, 
                           font=dict(color="#4ade80", size=11))
-        fig.add_annotation(x=deadline, y=max_ci_val, text="DEADLINE", showarrow=False,
+        fig.add_annotation(x=deadline_24, y=max_ci_val, text="DEADLINE", showarrow=False,
                           font=dict(color="#f87171", size=11))
         
         fig.update_layout(
@@ -981,14 +1064,15 @@ with tab1:
 
 # ================== TAB 2: Smart Advisor ==================
 with tab2:
-    st.subheader(f"🏆 Top {top_k} Windows ({now_time} → {deadline}) • {st.session_state.timezone}")
+    deadline_display = convert_to_12hour(deadline)
+    st.subheader(f"🏆 Top {top_k} Windows ({now_time} → {deadline_display}) • {st.session_state.timezone}")
     
     if not windows:
         st.warning(f"⚠️ No valid windows found! Try extending deadline or reducing duration.")
         st.info(f"""
         **Debug Info:**
         - Current time: {now_time}
-        - Deadline: {deadline}
+        - Deadline: {deadline_display}
         - Duration: {ceil_to_step(duration)} minutes
         - Available window: {available_mins} minutes
         """)
@@ -1011,6 +1095,9 @@ with tab2:
                     is_best = global_index == 0
                     border_style = "border: 2px solid #4ade80;" if is_best else "border: 1px solid #374151;"
                     
+                    start_12h = convert_to_12hour(w["start"])
+                    end_12h = convert_to_12hour(w["end"])
+                    
                     st.markdown(f"""
                     <div class="card" style="{border_style}">
                         <div style="text-align: center; margin-bottom: 0.5rem;">
@@ -1019,8 +1106,8 @@ with tab2:
                                 {'🥇 BEST' if rank == 1 else f'#{rank}'}
                             </span>
                         </div>
-                        <div style="font-size: 1.5rem; font-weight: 800; color: white; text-align: center;">
-                            {w["start"]} → {w["end"]}
+                        <div style="font-size: 1.3rem; font-weight: 800; color: white; text-align: center;">
+                            {start_12h} → {end_12h}
                         </div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.75rem;">
                             <div style="background: #0f172a; padding: 0.5rem; border-radius: 8px; text-align: center;">
@@ -1040,7 +1127,7 @@ with tab2:
                     
                     if st.button(f"✅ Select", key=f"sel_{global_index}", use_container_width=True):
                         st.session_state.selected_window = global_index
-                        st.success(f"✅ Selected: {w['start']} - {w['end']}")
+                        st.success(f"✅ Selected: {start_12h} - {end_12h}")
 
 # ================== TAB 3: Analytics ==================
 with tab3:
@@ -1053,12 +1140,12 @@ with tab3:
     projected_savings = co2_now - co2_best
     savings_pct = (projected_savings / co2_now * 100) if co2_now > 0 else 0
     
-    location_label = st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else f"Lat: {st.session_state.lat:.2f}, Lon: {st.session_state.lon:.2f}"
     st.markdown(f"""
     <div style="background: #1e293b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
         <div style="color: #94a3b8; font-size: 0.875rem;">Location Context</div>
         <div style="color: white; font-size: 1rem;">
-            {location_label} • {st.session_state.timezone} • Data: {st.session_state.data_source}
+            {st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else f"Lat: {st.session_state.lat:.2f}, Lon: {st.session_state.lon:.2f}"} 
+            • {st.session_state.timezone} • Data: {st.session_state.data_source}
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1124,8 +1211,8 @@ with tab4:
             run_date = st.date_input("Date", datetime.now())
             run_type = st.selectbox("Run Type", ["recommended", "baseline", "test"])
         with form_cols[1]:
-            default_start = windows[st.session_state.selected_window]["start"] if windows and st.session_state.selected_window < len(windows) else now_time
-            start_time = st.text_input("Start Time", default_start)
+            default_start = windows[st.session_state.selected_window]["start"] if windows and st.session_state.selected_window < len(windows) else convert_to_24hour(now_time)
+            start_time = st.text_input("Start Time (HH:MM AM/PM)", convert_to_12hour(default_start))
             run_duration = st.number_input("Duration (min)", 15, value=ceil_to_step(int(duration)), step=15)
         with form_cols[2]:
             run_appliance = st.selectbox("Appliance", list(APPLIANCES.keys()))
