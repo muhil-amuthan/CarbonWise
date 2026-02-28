@@ -499,7 +499,7 @@ st.markdown("""
     <h1>🌍 CarbonWise</h1>
     <p>Location-aware carbon intensity optimization. Automatically detects your grid region and optimizes appliance scheduling for minimal CO₂ impact.</p>
     <div style="margin-top: 1rem;">
-        <span class="badge-success">⚡ Live Grid Optimization</span>
+        <span style="background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.3); padding: 0.5rem 1rem; border-radius: 9999px; font-size: 0.875rem; font-weight: 600;">⚡ Live Grid Optimization</span>
         <span style="margin-left: 0.5rem; color: #64748b; font-size: 0.9rem;">Powered by Electricity Maps & System Time</span>
     </div>
 </div>
@@ -835,7 +835,7 @@ with kpi_cols[0]:
         <div class="metric-value" style="font-size: 1.2rem;">{st.session_state.selected_zone if st.session_state.location_mode == "Manual Select" else "Auto-Detected"}</div>
         <div class="metric-sub">{st.session_state.timezone}</div>
     </div>
-    """, unsafe_allow_html=True")
+    """, unsafe_allow_html=True)
 
 with kpi_cols[1]:
     st.markdown(f"""
