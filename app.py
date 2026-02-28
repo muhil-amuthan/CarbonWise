@@ -127,7 +127,7 @@ def t2m(t):
         elif not pm and h==12: h=0
         return h*60+m
     except:
-        try: h,m=map(int,t.split(":")); return h*60+m
+        try: h,m=map(int,t.split(":")): return h*60+m
         except: return 0
 
 def m2t(mins): return format_time_12h((mins//60)%24,mins%60)
@@ -141,7 +141,7 @@ def validate_time(t):
         h,m=map(int,t.split(";")); return 0<=h<24 and 0<=m<60
     except: 
         try:
-            tp=t.strip(); h,m=map(int,tp.split(":")); return 0<=h<24 and 0<=m<60
+            tp=t.strip(); h,m=map(int,tp.split(":")): return 0<=h<24 and 0<=m<60
         except: return False
 
 def detect_ip():
@@ -229,29 +229,325 @@ header{visibility:hidden}.stApp>header{display:none}
 .tz-info{color:#64748b;font-size:.75rem;text-align:center;margin-top:.25rem}
 [data-testid="stSidebar"]{background:#111827!important}
 [data-testid="stSidebar"] .stRadio>div{background:#1f2937!important;border-radius:8px;padding:.5rem}
-/* floating controls */
 .fc{position:fixed;top:1rem;right:1rem;z-index:999999;display:flex;gap:.5rem;background:rgba(15,23,42,.92);padding:.5rem;border-radius:12px;border:1px solid rgba(74,222,128,.3);backdrop-filter:blur(10px);box-shadow:0 4px 20px rgba(0,0,0,.5)}
 .cbtn{background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid rgba(74,222,128,.25);color:#4ade80;width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .25s;font-size:1.25rem;user-select:none}
 .cbtn:hover{background:linear-gradient(135deg,#4ade80,#22c55e);color:#0f172a;transform:scale(1.08);box-shadow:0 0 14px rgba(74,222,128,.45)}
-/* user dashboard panel */
 .udash{background:linear-gradient(135deg,#0f172a,#1e293b);border:2px solid rgba(74,222,128,.4);border-radius:20px;padding:2rem;margin-bottom:2rem}
 .avatar{width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,#4ade80,#22c55e);display:flex;align-items:center;justify-content:center;font-size:2.2rem;font-weight:800;color:#0f172a;margin:0 auto 1rem;border:4px solid rgba(74,222,128,.5);box-shadow:0 0 24px rgba(74,222,128,.35)}
 .sbox{background:rgba(30,41,59,.85);border:1px solid rgba(74,222,128,.2);border-radius:12px;padding:1rem;text-align:center}
 .sval{font-size:1.6rem;font-weight:800;color:#4ade80}
 .slbl{font-size:.7rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-top:.25rem}
 .bchip{display:inline-block;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.4);color:#4ade80;padding:.2rem .65rem;border-radius:9999px;font-size:.72rem;font-weight:600;margin:.15rem}
-/* sidebar profile button styling */
-[data-testid="stSidebar"] .profile-btn button{
-    background:linear-gradient(135deg,#052e16,#14532d)!important;
-    color:#4ade80!important;border:2px solid #4ade80!important;
-    border-radius:10px!important;font-weight:700!important;font-size:.95rem!important;
-    box-shadow:0 0 14px rgba(74,222,128,.35)!important;
-    min-height:2.8rem!important;
+[data-testid="stSidebar"] .profile-btn button{background:linear-gradient(135deg,#052e16,#14532d)!important;color:#4ade80!important;border:2px solid #4ade80!important;border-radius:10px!important;font-weight:700!important;font-size:.95rem!important;box-shadow:0 0 14px rgba(74,222,128,.35)!important;min-height:2.8rem!important;}
+
+/* ═══════════════════════════════════════
+   LEFT PROFILE FAB BUTTON
+═══════════════════════════════════════ */
+.lpfab{position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:99998;}
+.lpfab-btn{
+  width:44px;height:44px;
+  background:linear-gradient(135deg,#14532d,#052e16);
+  border:2px solid #4ade80;border-left:none;
+  border-radius:0 12px 12px 0;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;outline:none;
+  box-shadow:4px 0 24px rgba(74,222,128,.3);
+  transition:width .25s ease,box-shadow .25s ease,background .2s;
+  position:relative;overflow:visible;
 }
+.lpfab-btn:hover{width:56px;background:linear-gradient(135deg,#166534,#14532d);box-shadow:6px 0 32px rgba(74,222,128,.5);}
+.lpfab-btn svg{color:#4ade80;width:22px;height:22px;pointer-events:none;flex-shrink:0;transition:transform .2s;}
+.lpfab-btn:hover svg{transform:scale(1.12);}
+.lpfab-pulse{
+  position:absolute;left:0;top:-2px;bottom:-2px;right:-2px;
+  border:2px solid #4ade80;border-left:none;border-radius:0 12px 12px 0;
+  animation:lpPulse 2.5s ease-out infinite;pointer-events:none;
+}
+@keyframes lpPulse{0%{opacity:.6;transform:scale(1);}70%{opacity:0;transform:scale(1.55) translateX(8px);}100%{opacity:0;transform:scale(1.55) translateX(8px);}}
+.lpfab-tip{
+  position:absolute;left:52px;top:50%;transform:translateY(-50%) translateX(-6px);
+  background:#1e293b;border:1px solid rgba(74,222,128,.3);
+  color:#4ade80;font-size:.72rem;font-weight:600;
+  white-space:nowrap;padding:.3rem .75rem;border-radius:7px;
+  opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;
+}
+.lpfab-btn:hover+.lpfab-tip{opacity:1;transform:translateY(-50%) translateX(0);}
+
+/* ═══════════════════════════════════════
+   OVERLAY
+═══════════════════════════════════════ */
+.lpoverlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.58);backdrop-filter:blur(5px);
+  z-index:100000;
+}
+.lpoverlay.lpopen{display:block;}
+
+/* ═══════════════════════════════════════
+   SLIDE-IN PANEL
+═══════════════════════════════════════ */
+.lppanel{
+  position:fixed;left:0;top:0;bottom:0;
+  width:min(390px,93vw);
+  background:linear-gradient(160deg,#0f172a 0%,#111827 55%,#091a10 100%);
+  border-right:1px solid rgba(74,222,128,.2);
+  z-index:100001;
+  transform:translateX(-100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.lppanel::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,transparent,#4ade80,#22c55e,transparent);
+}
+.lppanel.lpopen{transform:translateX(0);}
+
+/* Panel header */
+.lp-hdr{display:flex;align-items:center;justify-content:space-between;padding:1.4rem 1.4rem 1rem;border-bottom:1px solid rgba(74,222,128,.1);}
+.lp-hdr-title{color:#4ade80;font-size:.88rem;font-weight:700;letter-spacing:.06em;display:flex;align-items:center;gap:.5rem;}
+.lp-close{width:32px;height:32px;background:#1e293b;border:1px solid rgba(148,163,184,.15);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#64748b;transition:all .2s;}
+.lp-close:hover{background:rgba(248,113,113,.1);border-color:#f87171;color:#f87171;}
+
+/* Panel body */
+.lp-body{flex:1;overflow-y:auto;padding:1.3rem;scrollbar-width:thin;scrollbar-color:rgba(74,222,128,.2) transparent;}
+
+/* Avatar row */
+.lp-arow{display:flex;align-items:center;gap:1rem;margin-bottom:1.3rem;}
+.lp-avatar{width:62px;height:62px;border-radius:50%;background:linear-gradient(135deg,#4ade80,#22c55e);display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:800;color:#0f172a;border:3px solid rgba(74,222,128,.38);box-shadow:0 0 20px rgba(74,222,128,.22);flex-shrink:0;transition:transform .2s;}
+.lp-avatar:hover{transform:scale(1.07);}
+.lp-aname{font-size:1rem;font-weight:700;color:white;}
+.lp-asub{font-size:.76rem;color:#64748b;margin-top:.15rem;}
+.lp-pill{display:inline-flex;align-items:center;gap:.32rem;background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.28);color:#4ade80;font-size:.65rem;font-weight:600;padding:.18rem .55rem;border-radius:999px;margin-top:.38rem;}
+.lp-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:lpblink 1.5s infinite;}
+@keyframes lpblink{0%,100%{opacity:1}50%{opacity:.22}}
+
+/* Stats */
+.lp-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.55rem;margin-bottom:1.3rem;}
+.lp-sbox{background:#1e293b;border:1px solid rgba(74,222,128,.12);border-radius:10px;padding:.65rem .4rem;text-align:center;}
+.lp-sval{font-size:1.15rem;font-weight:800;color:#4ade80;}
+.lp-slbl{font-size:.6rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:.22rem;}
+
+/* Section title */
+.lp-section{font-size:.68rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin:1.1rem 0 .7rem;display:flex;align-items:center;gap:.5rem;}
+.lp-section::after{content:'';flex:1;height:1px;background:rgba(148,163,184,.08);}
+
+/* Fields */
+.lp-lbl{font-size:.68rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.35rem;}
+.lp-inp{width:100%;background:#1e293b;border:1px solid rgba(148,163,184,.12);border-radius:9px;padding:.62rem .82rem;font-size:.875rem;color:#e2e8f0;outline:none;margin-bottom:.9rem;transition:border-color .2s,box-shadow .2s;font-family:inherit;}
+.lp-inp:focus{border-color:rgba(74,222,128,.45);box-shadow:0 0 0 3px rgba(74,222,128,.07);}
+.lp-inp::placeholder{color:#374151;}
+select.lp-inp{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .8rem center;cursor:pointer;}
+
+/* Badges */
+.lp-badges{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.5rem;}
+.lp-badge{display:inline-flex;align-items:center;gap:.3rem;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.18);color:#4ade80;font-size:.69rem;font-weight:600;padding:.22rem .55rem;border-radius:6px;opacity:.42;transition:opacity .25s,background .25s;}
+.lp-badge.earned{opacity:1;background:rgba(74,222,128,.14);}
+
+/* Save button */
+.lp-save{width:100%;padding:.78rem;margin-top:.6rem;background:linear-gradient(135deg,#166534,#14532d);border:1px solid #4ade80;border-radius:9px;color:#4ade80;font-size:.88rem;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:.45rem;transition:all .2s;box-shadow:0 4px 14px rgba(74,222,128,.13);}
+.lp-save:hover{background:linear-gradient(135deg,#15803d,#166534);box-shadow:0 6px 22px rgba(74,222,128,.28);transform:translateY(-1px);}
+.lp-save:active{transform:translateY(0);}
+
+/* Panel footer */
+.lp-footer{padding:.9rem 1.3rem;border-top:1px solid rgba(74,222,128,.1);font-size:.68rem;color:#475569;display:flex;justify-content:space-between;}
+
+/* Toast */
+.lp-toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%) translateY(90px);background:linear-gradient(135deg,#14532d,#052e16);border:1px solid #4ade80;color:#4ade80;font-size:.82rem;font-weight:600;padding:.68rem 1.5rem;border-radius:9px;display:flex;align-items:center;gap:.45rem;z-index:200000;box-shadow:0 8px 28px rgba(74,222,128,.2);transition:transform .32s cubic-bezier(.34,1.56,.64,1);}
+.lp-toast.lpshow{transform:translateX(-50%) translateY(0);}
 </style>
 """, unsafe_allow_html=True)
 
-# ── Floating sidebar/fullscreen controls (JS only, no user btn here) ──
+# ── Left Profile FAB + Slide-in Panel (pure HTML/JS, no Streamlit widgets) ──
+st.markdown("""
+<!-- ═══ LEFT PROFILE FAB ═══ -->
+<div class="lpfab">
+  <button class="lpfab-btn" onclick="lpOpen()" title="My Profile">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="8" r="4"/>
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+    </svg>
+    <div class="lpfab-pulse"></div>
+  </button>
+  <div class="lpfab-tip">My Profile</div>
+</div>
+
+<!-- ═══ OVERLAY ═══ -->
+<div class="lpoverlay" id="lpOverlay" onclick="lpClose()"></div>
+
+<!-- ═══ SLIDE-IN PANEL ═══ -->
+<div class="lppanel" id="lpPanel">
+
+  <div class="lp-hdr">
+    <div class="lp-hdr-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      USER PROFILE
+    </div>
+    <div class="lp-close" onclick="lpClose()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </div>
+  </div>
+
+  <div class="lp-body">
+
+    <!-- Avatar row -->
+    <div class="lp-arow">
+      <div class="lp-avatar" id="lpAvatar">?</div>
+      <div>
+        <div class="lp-aname" id="lpDispName">Guest User</div>
+        <div class="lp-asub"  id="lpDispEmail">No email set</div>
+        <div class="lp-pill"><span class="lp-dot"></span>Active Session</div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="lp-stats">
+      <div class="lp-sbox"><div class="lp-sval" id="lpRuns">0</div><div class="lp-slbl">Runs</div></div>
+      <div class="lp-sbox"><div class="lp-sval" id="lpKwh">0.00</div><div class="lp-slbl">kWh</div></div>
+      <div class="lp-sbox"><div class="lp-sval" id="lpCo2">0.000</div><div class="lp-slbl">CO₂ kg</div></div>
+    </div>
+
+    <!-- Edit section -->
+    <div class="lp-section">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit Details
+    </div>
+
+    <div class="lp-lbl">Full Name</div>
+    <input class="lp-inp" id="lpName" type="text" placeholder="Your full name" oninput="lpUpdateAv()">
+
+    <div class="lp-lbl">Email Address</div>
+    <input class="lp-inp" id="lpEmail" type="email" placeholder="you@example.com">
+
+    <div class="lp-lbl">Preferred Grid Zone</div>
+    <select class="lp-inp" id="lpZone">
+      <optgroup label="🇮🇳 India">
+        <option>North India (NR)</option>
+        <option>South India (SR)</option>
+        <option>West India (WR)</option>
+        <option>East India (ER)</option>
+        <option>North-East (NER)</option>
+      </optgroup>
+      <optgroup label="🇪🇺 Europe">
+        <option>Germany (DE)</option>
+        <option>France (FR)</option>
+        <option>UK (GB)</option>
+        <option>Netherlands (NL)</option>
+        <option>Spain (ES)</option>
+        <option>Italy (IT)</option>
+        <option>Nordics (NO/SE/FI)</option>
+      </optgroup>
+      <optgroup label="🇺🇸 United States">
+        <option>California (CAISO)</option>
+        <option>Texas (ERCOT)</option>
+        <option>New York (NYISO)</option>
+        <option>Midwest (MISO)</option>
+        <option>PJM (East)</option>
+        <option>Pacific Northwest</option>
+      </optgroup>
+      <optgroup label="🌏 Asia Pacific">
+        <option>Australia (AUS)</option>
+        <option>Japan (JP)</option>
+        <option>Singapore (SG)</option>
+        <option>South Korea (KR)</option>
+      </optgroup>
+    </select>
+
+    <!-- Badges section -->
+    <div class="lp-section">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+      Achievements
+    </div>
+    <div class="lp-badges">
+      <div class="lp-badge" id="lpB1">🌱 Green Starter</div>
+      <div class="lp-badge" id="lpB2">⚡ Eco Optimizer</div>
+      <div class="lp-badge" id="lpB3">🌍 Carbon Hero</div>
+      <div class="lp-badge" id="lpB4">📋 Profile Set</div>
+    </div>
+
+    <button class="lp-save" onclick="lpSave()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save Profile
+    </button>
+
+  </div>
+
+  <div class="lp-footer">
+    <span>🌍 CarbonWise</span>
+    <span style="color:rgba(74,222,128,.35)">v2.1.0</span>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="lp-toast" id="lpToast">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+  Profile saved successfully!
+</div>
+
+<script>
+// ── state ──
+var lpState = {
+  name:'', email:'', zone:'North India (NR)',
+  runs:0, kwh:0, co2:0
+};
+
+function lpOpen() {
+  document.getElementById('lpPanel').classList.add('lpopen');
+  document.getElementById('lpOverlay').classList.add('lpopen');
+}
+function lpClose() {
+  document.getElementById('lpPanel').classList.remove('lpopen');
+  document.getElementById('lpOverlay').classList.remove('lpopen');
+}
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') lpClose(); });
+
+function lpUpdateAv() {
+  var n = document.getElementById('lpName').value.trim();
+  var parts = n.split(/\\s+/).slice(0,2);
+  var ini = parts.map(function(w){ return w[0] ? w[0].toUpperCase() : ''; }).join('') || '?';
+  document.getElementById('lpAvatar').textContent = ini;
+  document.getElementById('lpDispName').textContent = n || 'Guest User';
+}
+
+function lpSave() {
+  var name  = document.getElementById('lpName').value.trim();
+  var email = document.getElementById('lpEmail').value.trim();
+  var zone  = document.getElementById('lpZone').value;
+
+  // Update display
+  document.getElementById('lpDispName').textContent  = name  || 'Guest User';
+  document.getElementById('lpDispEmail').textContent = email || 'No email set';
+
+  // Avatar initials
+  var parts = (name||'').split(/\\s+/).slice(0,2);
+  var ini = parts.map(function(w){ return w[0] ? w[0].toUpperCase() : ''; }).join('') || '?';
+  document.getElementById('lpAvatar').textContent = ini;
+
+  // Badges
+  if(name && email) document.getElementById('lpB4').classList.add('earned');
+  lpState.runs += 1;
+  document.getElementById('lpRuns').textContent = lpState.runs;
+  if(lpState.runs >= 1) document.getElementById('lpB1').classList.add('earned');
+  if(lpState.runs >= 5) document.getElementById('lpB2').classList.add('earned');
+
+  // Update kWh & CO2 mock
+  lpState.kwh  = parseFloat((lpState.kwh + 0.5).toFixed(2));
+  lpState.co2  = parseFloat((lpState.co2 + 0.1).toFixed(3));
+  document.getElementById('lpKwh').textContent = lpState.kwh.toFixed(2);
+  document.getElementById('lpCo2').textContent = lpState.co2.toFixed(3);
+  if(lpState.co2 >= 1.0) document.getElementById('lpB3').classList.add('earned');
+
+  lpShowToast();
+}
+
+function lpShowToast() {
+  var t = document.getElementById('lpToast');
+  t.classList.add('lpshow');
+  setTimeout(function(){ t.classList.remove('lpshow'); }, 2700);
+}
+</script>
+""", unsafe_allow_html=True)
+
+# ── Floating sidebar/fullscreen controls ──
 st.markdown("""
 <div class="fc">
   <div class="cbtn" onclick="toggleSB()" title="Sidebar (F10)"><span id="sbi">☰</span></div>
@@ -276,7 +572,7 @@ document.addEventListener('keydown',e=>{
 """, unsafe_allow_html=True)
 
 # ============================================================
-# User dashboard as @st.dialog  ← KEY FIX
+# User dashboard as @st.dialog
 # ============================================================
 @st.dialog("👤 My Profile & Dashboard", width="large")
 def show_user_dashboard():
@@ -293,7 +589,6 @@ def show_user_dashboard():
 
     initials = "".join(w[0].upper() for w in st.session_state.user_name.split()[:2]) if st.session_state.user_name else "?"
 
-    # Avatar + stats row
     ca, cs = st.columns([1,3], gap="medium")
     with ca:
         st.markdown(f"""
@@ -310,8 +605,6 @@ def show_user_dashboard():
                 st.markdown(f'<div class="sbox"><div class="sval">{val}</div><div class="slbl">{lbl}</div></div>', unsafe_allow_html=True)
 
     st.divider()
-
-    # Edit form
     st.markdown("#### ✏️ Edit Profile")
     f1,f2 = st.columns(2)
     with f1:
@@ -331,8 +624,6 @@ def show_user_dashboard():
         st.success("✅ Profile saved successfully!")
 
     st.divider()
-
-    # Badges
     st.markdown("#### 🏅 Achievement Badges")
     badges = [
         ("🌱","Green Starter",  total_runs>=1,  f"{total_runs}/1 run"),
@@ -353,8 +644,6 @@ def show_user_dashboard():
             </div>""", unsafe_allow_html=True)
 
     st.divider()
-
-    # Recent activity
     st.markdown("#### 🗓️ Recent Activity")
     if log_df.empty:
         st.info("No runs logged yet. Use the **Logger** tab to record your first run!")
@@ -366,8 +655,6 @@ def show_user_dashboard():
 # SIDEBAR
 # ============================================================
 with st.sidebar:
-
-    # ── PROFILE BUTTON ── always first, always visible ────────
     st.markdown('<div class="profile-btn">', unsafe_allow_html=True)
     btn_lbl = f"👤  {st.session_state.user_name}" if st.session_state.user_name else "👤  My Profile"
     if st.button(btn_lbl, use_container_width=True, key="open_user_dash"):
@@ -375,8 +662,6 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("<hr style='border-color:rgba(74,222,128,.2);margin:.5rem 0;'>", unsafe_allow_html=True)
-
-    # ── Config ───────────────────────────────────────────────
     st.title("⚙️ Configuration")
     st.markdown("### 📍 Location Settings")
 
