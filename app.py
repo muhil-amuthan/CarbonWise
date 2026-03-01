@@ -144,7 +144,7 @@ def time_to_minutes(t):
         return 0
 
 def minutes_to_time(mins):
-    return f"{(mins//60)%24:02d}:{mins%60:02d}"
+    return f"{(mins // 60) % 24:02d}:{mins % 60:02d}"
 
 def to_12hr(time_str):
     """HH:MM → h:MM AM/PM"""
@@ -164,14 +164,14 @@ def get_system_time(tz_str="UTC"):
 
 def get_current_time_24(tz_str="UTC", step=15):
     now = get_system_time(tz_str)
-    m = (now.minute // step) * step
+    m   = (now.minute // step) * step
     return f"{now.hour:02d}:{m:02d}"
 
 def get_current_time_exact_12(tz_str="UTC"):
-    now = get_system_time(tz_str)
+    now    = get_system_time(tz_str)
     h, m, s = now.hour, now.minute, now.second
     period = "AM" if h < 12 else "PM"
-    h12 = h % 12 or 12
+    h12    = h % 12 or 12
     return f"{h12}:{m:02d}:{s:02d} {period}"
 
 def append_log(row):
@@ -203,9 +203,11 @@ def detect_location_ip():
         r = requests.get("https://ipapi.co/json/", timeout=5)
         if r.status_code == 200:
             d = r.json()
-            return {"lat": d.get("latitude"), "lon": d.get("longitude"),
-                    "city": d.get("city"), "country": d.get("country_name"),
-                    "timezone": d.get("timezone")}
+            return {
+                "lat": d.get("latitude"), "lon": d.get("longitude"),
+                "city": d.get("city"), "country": d.get("country_name"),
+                "timezone": d.get("timezone")
+            }
     except:
         pass
     return None
@@ -213,18 +215,22 @@ def detect_location_ip():
 def fetch_electricity_maps_data(lat, lon, api_token=None):
     try:
         headers = {"auth-token": api_token} if api_token else {}
-        r = requests.get(f"{ELECTRICITY_MAPS_API}carbon-intensity/latest",
-                         headers=headers, params={"lat": lat, "lon": lon}, timeout=10)
+        r = requests.get(
+            f"{ELECTRICITY_MAPS_API}carbon-intensity/latest",
+            headers=headers, params={"lat": lat, "lon": lon}, timeout=10
+        )
         if r.status_code == 200:
             base_ci = r.json().get("carbonIntensity", 400)
             rows = []
             for h in range(24):
                 for m in [0, 15, 30, 45]:
-                    f = 0.7 if h<6 else 1.2 if h<10 else 1.0 if h<16 else 1.3 if h<22 else 0.8
+                    f  = 0.7 if h<6 else 1.2 if h<10 else 1.0 if h<16 else 1.3 if h<22 else 0.8
                     ci = base_ci * f
-                    rows.append({"time": f"{h:02d}:{m:02d}", "ci": ci,
-                                 "thermal_mw": 5000*(ci/base_ci), "hydro_mw": 2000,
-                                 "nuclear_mw": 1500, "res_mw": max(0, 3000-5000*(ci/base_ci-0.5))})
+                    rows.append({
+                        "time": f"{h:02d}:{m:02d}", "ci": ci,
+                        "thermal_mw": 5000 * (ci / base_ci), "hydro_mw": 2000,
+                        "nuclear_mw": 1500, "res_mw": max(0, 3000 - 5000 * (ci / base_ci - 0.5))
+                    })
             return pd.DataFrame(rows)
     except:
         pass
@@ -238,19 +244,18 @@ def make_full_day_ci(df_ci):
         for m in [0, 15, 30, 45]:
             t  = f"{h:02d}:{m:02d}"
             ci = safe_float(ci_dict.get(t, mean_ci), mean_ci)
-            rows.append({"time": t, "ci": ci,
-                         "color": get_ci_color(ci), "status": get_ci_status(ci)})
+            rows.append({"time": t, "ci": ci, "color": get_ci_color(ci), "status": get_ci_status(ci)})
     return pd.DataFrame(rows)
 
 def recommend_windows(full_day_ci, duration_min, deadline, top_k, now_time):
     duration_min = ceil_to_step(duration_min, STEP_MIN)
     n_slots = duration_min // STEP_MIN
     try:
-        dh, dm = map(int, deadline.split(":")); deadline_mins = dh*60+dm
+        dh, dm = map(int, deadline.split(":")); deadline_mins = dh * 60 + dm
     except:
-        deadline_mins = 23*60+59
+        deadline_mins = 23 * 60 + 59
     try:
-        nh, nm = map(int, now_time.split(":")); now_mins = nh*60+nm
+        nh, nm = map(int, now_time.split(":")); now_mins = nh * 60 + nm
     except:
         now_mins = 0
     if deadline_mins <= now_mins:
@@ -258,16 +263,16 @@ def recommend_windows(full_day_ci, duration_min, deadline, top_k, now_time):
     times = full_day_ci["time"].tolist()
     cis   = full_day_ci["ci"].tolist()
     wins  = []
-    for i in range(len(times)-n_slots+1):
-        sh, sm = map(int, times[i].split(":"))
-        s_mins = sh*60+sm
-        adj = s_mins if s_mins >= now_mins else s_mins+1440
+    for i in range(len(times) - n_slots + 1):
+        sh, sm  = map(int, times[i].split(":"))
+        s_mins  = sh * 60 + sm
+        adj     = s_mins if s_mins >= now_mins else s_mins + 1440
         if adj < now_mins: continue
-        if adj+duration_min > deadline_mins: continue
-        em = adj+duration_min
-        et = f"{(em//60)%24:02d}:{em%60:02d}"
-        wci = [safe_float(x, 500) for x in cis[i:i+n_slots]]
-        avg = sum(wci)/len(wci)
+        if adj + duration_min > deadline_mins: continue
+        em = adj + duration_min
+        et = f"{(em // 60) % 24:02d}:{em % 60:02d}"
+        wci = [safe_float(x, 500) for x in cis[i:i + n_slots]]
+        avg = sum(wci) / len(wci)
         wins.append({"start": times[i], "end": et, "avg_ci": avg,
                      "color": get_ci_color(avg), "status": get_ci_status(avg)})
     wins.sort(key=lambda x: x["avg_ci"])
@@ -278,7 +283,7 @@ def find_ci_at_time(full_day_ci, time_str):
     return float(full_day_ci[mask]["ci"].iloc[0]) if mask.any() else None
 
 # ============================================================
-# Page config
+# Page config  — MUST be first Streamlit call
 # ============================================================
 st.set_page_config(page_title="CarbonWise", page_icon="🌍", layout="wide")
 
@@ -288,101 +293,152 @@ st.set_page_config(page_title="CarbonWise", page_icon="🌍", layout="wide")
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-* { font-family: 'Inter', sans-serif !important; }
-.main { background-color: #0a0e17; }
 
-/* Hide native Streamlit sidebar collapse arrow buttons */
+* { font-family: 'Inter', sans-serif !important; box-sizing: border-box; }
+
+/* ── dark page background ── */
+.main, [data-testid="stAppViewContainer"] { background-color: #0a0e17; }
+[data-testid="stHeader"]                  { background-color: #0a0e17; }
+
+/* ── hide every native Streamlit sidebar collapse arrow ── */
 [data-testid="collapsedControl"],
-button[kind="header"],
-[data-testid="stSidebarCollapseButton"] { display: none !important; }
+[data-testid="stSidebarCollapseButton"],
+button[kind="header"] { display: none !important; visibility: hidden !important; }
 
+/* ── hero ── */
 .hero {
-    background: linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);
-    padding: 2rem; border-radius: 16px; margin-bottom: 2rem;
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+    padding: 2rem; border-radius: 16px; margin-bottom: 1.5rem;
     border: 1px solid rgba(74,222,128,0.2);
 }
-.hero h1 { color:#4ade80;margin:0;font-size:2.5rem;font-weight:800; }
-.hero p  { color:#94a3b8;margin:0.5rem 0 0;font-size:1.1rem; }
+.hero h1 { color: #4ade80; margin: 0; font-size: 2.2rem; font-weight: 800; }
+.hero p  { color: #94a3b8; margin: 0.4rem 0 0; font-size: 1rem; }
 
-.location-badge {
-    background:linear-gradient(135deg,#3b82f6,#1d4ed8);
-    color:white;padding:0.5rem 1rem;border-radius:8px;
-    font-size:0.875rem;font-weight:600;display:inline-flex;
-    align-items:center;gap:0.5rem;border:1px solid rgba(59,130,246,0.3);
+/* ── sidebar ── */
+[data-testid="stSidebar"] {
+    background: #0f1623 !important;
+    border-right: 1px solid rgba(74,222,128,0.1);
 }
+
+/* ── KPI cards ── */
 .kpi {
-    background:linear-gradient(135deg,#1e293b,#0f172a);
-    padding:1.5rem;border-radius:12px;text-align:center;
-    border-left:4px solid #4ade80;
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    padding: 1.25rem 1rem; border-radius: 12px; text-align: center;
+    border-left: 4px solid #4ade80; height: 100%;
+    min-height: 110px;
+    display: flex; flex-direction: column; justify-content: center;
 }
-.metric-value { font-size:1.75rem;font-weight:800;color:white;margin-top:0.5rem; }
-.metric-label { color:#94a3b8;font-size:0.875rem;text-transform:uppercase;
-                letter-spacing:0.05em;font-weight:600; }
-.card {
-    background:linear-gradient(135deg,#1e293b,#0f172a);
-    padding:1.5rem;border-radius:12px;
-    border:1px solid rgba(148,163,184,0.1);
+.kpi .metric-label {
+    color: #94a3b8; font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: 0.06em; font-weight: 600; margin-bottom: 4px;
 }
-[data-testid="stSidebar"] { background:#111827 !important; }
+.kpi .metric-value {
+    color: white; font-weight: 800; line-height: 1.1; margin: 2px 0;
+    font-size: 1.4rem; word-break: break-word;
+}
+.kpi .metric-sub { color: #64748b; font-size: 0.7rem; margin-top: 3px; }
+
+/* ── recommendation cards ── */
+.rec-card {
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    padding: 1.25rem; border-radius: 12px;
+    margin-bottom: 0.5rem;
+}
+
+/* ── live time block ── */
 .live-time {
-    background:rgba(74,222,128,0.1);border:1px solid #4ade80;
-    padding:0.75rem;border-radius:8px;color:#4ade80;
-    font-weight:700;text-align:center;font-size:1.1rem;margin-bottom:1rem;
+    background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.4);
+    padding: 0.75rem; border-radius: 10px; color: #4ade80;
+    font-weight: 700; text-align: center; font-size: 1.15rem;
+    letter-spacing: 0.04em;
 }
-.timezone-info { color:#64748b;font-size:0.75rem;text-align:center;margin-top:0.25rem; }
+.tz-sub { color: #64748b; font-size: 0.72rem; text-align: center; margin-top: 4px; }
+
+/* ── location badge ── */
+.loc-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+    color: white; padding: 6px 14px; border-radius: 8px;
+    font-size: 0.82rem; font-weight: 600;
+    border: 1px solid rgba(99,179,237,0.3);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── section dividers ── */
+hr { border-color: rgba(74,222,128,0.1) !important; margin: 1rem 0 !important; }
+
+/* ── download / button fix ── */
+[data-testid="stDownloadButton"] > button,
+.stButton > button {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── data table ── */
+[data-testid="stDataFrame"] { width: 100% !important; }
+
+/* ── tab overline ── */
+.stTabs [data-baseweb="tab-list"] { gap: 4px; }
+.stTabs [data-baseweb="tab"] { padding: 8px 16px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# Floating Action Buttons via components.html
-# (renders in its own iframe so CSS/JS works perfectly)
+# FAB — Sidebar toggle + Fullscreen  (via components.html)
+# The iframe height=0 makes it invisible; buttons escape via
+# window.parent DOM manipulation.
 # ============================================================
 components.html("""
-<!DOCTYPE html>
-<html>
-<head>
+<!DOCTYPE html><html><head>
 <style>
-  body { margin:0; padding:0; background:transparent; overflow:hidden; }
+  html, body { margin:0; padding:0; overflow:hidden; background:transparent; }
+
   #fab {
     position: fixed;
-    top: 8px; right: 8px;
-    display: flex; gap: 6px; align-items: center;
+    top: 10px; right: 14px;
+    display: flex; gap: 7px;
     z-index: 2147483647;
   }
   .fb {
-    width: 40px; height: 40px;
-    background: linear-gradient(135deg,#1e293b,#0f172a);
-    border: 1.5px solid rgba(74,222,128,0.55);
+    width: 38px; height: 38px;
+    background: linear-gradient(145deg, #1e293b, #0f172a);
+    border: 1.5px solid rgba(74,222,128,0.5);
     border-radius: 10px;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: all .18s ease;
-    box-shadow: 0 4px 16px rgba(0,0,0,.6);
-    padding: 0;
+    transition: background .18s, transform .18s, box-shadow .18s;
+    box-shadow: 0 3px 12px rgba(0,0,0,.55);
+    padding: 0; outline: none;
   }
   .fb:hover {
     background: rgba(74,222,128,0.15);
     border-color: #4ade80;
-    transform: scale(1.1);
-    box-shadow: 0 6px 22px rgba(74,222,128,.3);
+    transform: scale(1.08);
+    box-shadow: 0 5px 18px rgba(74,222,128,.28);
   }
-  svg { width:18px;height:18px;fill:none;stroke:#4ade80;
-        stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none; }
+  .fb:active { transform: scale(0.97); }
+  svg {
+    width: 17px; height: 17px;
+    fill: none; stroke: #4ade80;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
 <div id="fab">
 
-  <!-- Sidebar toggle -->
+  <!-- Sidebar toggle button -->
   <button class="fb" id="btn-sb" title="Toggle Sidebar">
     <svg viewBox="0 0 24 24">
-      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <rect x="3" y="3" width="18" height="18" rx="2.5"/>
       <line x1="9" y1="3" x2="9" y2="21"/>
     </svg>
   </button>
 
-  <!-- Fullscreen toggle -->
-  <button class="fb" id="btn-fs" title="Toggle Fullscreen">
+  <!-- Fullscreen toggle button -->
+  <button class="fb" id="btn-fs" title="Fullscreen">
     <svg id="ic-exp" viewBox="0 0 24 24">
       <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
       <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
@@ -399,99 +455,112 @@ components.html("""
 
 </div>
 <script>
-var pd = window.parent.document;
+(function(){
+  var pd = window.parent.document;
 
-/* ── Sidebar ── */
-document.getElementById('btn-sb').addEventListener('click', function(){
-  var btn =
-    pd.querySelector('[data-testid="collapsedControl"]') ||
-    pd.querySelector('[data-testid="stSidebarCollapseButton"]') ||
-    pd.querySelector('button[aria-label="Close sidebar"]') ||
-    pd.querySelector('button[aria-label="Open sidebar"]');
-  if(btn){ btn.click(); return; }
-  var sb = pd.querySelector('[data-testid="stSidebar"]');
-  if(sb){ sb.style.display = sb.style.display==='none' ? '' : 'none'; }
-});
+  /* ─ Sidebar toggle ─ */
+  document.getElementById('btn-sb').onclick = function(){
+    /* Try native Streamlit collapse buttons first */
+    var b = pd.querySelector('[data-testid="collapsedControl"]')
+         || pd.querySelector('[data-testid="stSidebarCollapseButton"]')
+         || pd.querySelector('button[aria-label="Close sidebar"]')
+         || pd.querySelector('button[aria-label="Open sidebar"]');
+    if(b){ b.click(); return; }
+    /* Fallback: toggle display */
+    var sb = pd.querySelector('[data-testid="stSidebar"]');
+    if(sb){ sb.style.display = sb.style.display === 'none' ? '' : 'none'; }
+  };
 
-/* ── Fullscreen ── */
-document.getElementById('btn-fs').addEventListener('click', function(){
-  var exp=document.getElementById('ic-exp'), cmp=document.getElementById('ic-cmp');
-  if(!pd.fullscreenElement){
-    pd.documentElement.requestFullscreen()
-      .then(function(){ exp.style.display='none'; cmp.style.display=''; })
-      .catch(function(e){ console.warn(e); });
-  } else {
-    pd.exitFullscreen()
-      .then(function(){ exp.style.display=''; cmp.style.display='none'; });
-  }
-});
+  /* ─ Fullscreen toggle ─ */
+  document.getElementById('btn-fs').onclick = function(){
+    var exp = document.getElementById('ic-exp');
+    var cmp = document.getElementById('ic-cmp');
+    if(!pd.fullscreenElement){
+      pd.documentElement.requestFullscreen()
+        .then(function(){ exp.style.display='none'; cmp.style.display=''; })
+        .catch(function(e){ console.warn('FS:', e); });
+    } else {
+      pd.exitFullscreen()
+        .then(function(){ exp.style.display=''; cmp.style.display='none'; });
+    }
+  };
 
-/* Reset icon on Esc */
-pd.addEventListener('fullscreenchange', function(){
-  if(!pd.fullscreenElement){
-    var exp=document.getElementById('ic-exp'), cmp=document.getElementById('ic-cmp');
-    if(exp){ exp.style.display=''; } if(cmp){ cmp.style.display='none'; }
-  }
-});
+  /* Reset icon when user presses Esc */
+  pd.addEventListener('fullscreenchange', function(){
+    if(!pd.fullscreenElement){
+      var exp = document.getElementById('ic-exp');
+      var cmp = document.getElementById('ic-cmp');
+      if(exp) exp.style.display = '';
+      if(cmp) cmp.style.display = 'none';
+    }
+  });
+})();
 </script>
-</body>
-</html>
+</body></html>
 """, height=0, scrolling=False)
 
-# ============================================================
-# Session state init
-# ============================================================
-if "appliance" not in st.session_state:
-    st.session_state.appliance       = "Water Motor"
-    st.session_state.kw              = 0.75
-    st.session_state.duration        = 30
-    st.session_state.deadline        = "08:00"
-    st.session_state.selected_window = 0
-    st.session_state.location_mode   = "Auto-Detect"
-    st.session_state.selected_region = "India"
-    st.session_state.selected_zone   = "North India (NR)"
-    st.session_state.lat             = 28.6139
-    st.session_state.lon             = 77.2090
-    st.session_state.timezone        = "Asia/Kolkata"
-    st.session_state.data_source     = "Automatic (API)"
 
 # ============================================================
-# Hero
+# Session state init  (only on first run)
+# ============================================================
+_defaults = dict(
+    appliance       = "Water Motor",
+    kw              = 0.75,
+    duration        = 30,
+    deadline        = "08:00",
+    selected_window = 0,
+    location_mode   = "Auto-Detect",
+    selected_region = "India",
+    selected_zone   = "North India (NR)",
+    lat             = 28.6139,
+    lon             = 77.2090,
+    timezone        = "Asia/Kolkata",
+    data_source     = "Automatic (API)",
+)
+for k, v in _defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+
+# ============================================================
+# Hero section
 # ============================================================
 st.markdown("""
 <div class="hero">
   <h1>🌍 CarbonWise</h1>
-  <p>Location-aware carbon intensity optimization. Automatically detects your grid region
-     and optimizes appliance scheduling for minimal CO₂ impact.</p>
-  <div style="margin-top:1rem;">
-    <span style="background:rgba(74,222,128,0.15);color:#4ade80;
-                 border:1px solid rgba(74,222,128,0.3);padding:0.5rem 1rem;
-                 border-radius:9999px;font-size:0.875rem;font-weight:600;">
+  <p>Location-aware carbon intensity optimization — schedules appliances during the
+     cleanest grid windows to minimize your CO₂ footprint.</p>
+  <div style="margin-top:0.9rem; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+    <span style="background:rgba(74,222,128,0.12); color:#4ade80;
+                 border:1px solid rgba(74,222,128,0.3); padding:5px 14px;
+                 border-radius:999px; font-size:0.82rem; font-weight:600;">
       ⚡ Live Grid Optimization
     </span>
-    <span style="margin-left:0.5rem;color:#64748b;font-size:0.9rem;">
+    <span style="color:#475569; font-size:0.85rem;">
       Powered by Electricity Maps &amp; System Time
     </span>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
+
 # ============================================================
-# Sidebar
+# ─────────────────────  SIDEBAR  ────────────────────────────
 # ============================================================
 with st.sidebar:
-    st.title("⚙️ Configuration")
-    st.markdown("### 📍 Location Settings")
+    st.markdown("## ⚙️ Configuration")
+    st.markdown("### 📍 Location")
 
     MODES = ["Auto-Detect", "GPS Location", "Manual Select", "Custom Coordinates"]
     location_mode = st.radio(
-        "Location Mode", MODES,
+        "Mode", MODES,
         index=MODES.index(st.session_state.location_mode)
-              if st.session_state.location_mode in MODES else 0
+              if st.session_state.location_mode in MODES else 0,
+        label_visibility="collapsed"
     )
     st.session_state.location_mode = location_mode
 
-    # ── AUTO DETECT ──────────────────────────
+    # ── AUTO DETECT ──────────────────────────────────────────
     if location_mode == "Auto-Detect":
         if st.button("🔍 Detect via IP", use_container_width=True):
             with st.spinner("Detecting..."):
@@ -499,196 +568,248 @@ with st.sidebar:
                 if loc:
                     st.session_state.lat      = loc["lat"]
                     st.session_state.lon      = loc["lon"]
-                    st.session_state.timezone = loc.get("timezone","UTC")
+                    st.session_state.timezone = loc.get("timezone", "UTC")
                     st.success(f"📍 {loc['city']}, {loc['country']}")
                     st.rerun()
                 else:
-                    st.error("Detection failed.")
+                    st.error("Detection failed. Try Manual Select.")
+
         st.markdown(f"""
-        <div style="background:#1f2937;padding:.75rem;border-radius:8px;margin-top:.5rem;">
-            <div style="color:#94a3b8;font-size:.75rem;">Detected Coordinates</div>
-            <div style="color:#4ade80;font-size:.875rem;font-weight:600;">
-                {st.session_state.lat:.4f}, {st.session_state.lon:.4f}
-            </div>
+        <div style="background:#1f2937;padding:10px 12px;border-radius:8px;margin-top:6px;">
+          <div style="color:#64748b;font-size:.72rem;margin-bottom:2px;">COORDINATES</div>
+          <div style="color:#4ade80;font-size:.85rem;font-weight:600;">
+            {st.session_state.lat:.4f}, {st.session_state.lon:.4f}
+          </div>
         </div>""", unsafe_allow_html=True)
 
-    # ── GPS LOCATION ─────────────────────────
+    # ── GPS LOCATION ─────────────────────────────────────────
     elif location_mode == "GPS Location":
-        st.markdown("<div style='color:#94a3b8;font-size:.85rem;margin-bottom:6px;'>"
-                    "Click the button below — your browser will ask for location permission.</div>",
-                    unsafe_allow_html=True)
+        st.caption("Your browser will request location permission.")
 
-        # GPS HTML widget inside sidebar
         components.html("""
 <!DOCTYPE html><html><head>
 <style>
-  body{margin:0;padding:0;background:transparent;font-family:Inter,sans-serif;}
-  #btn{width:100%;padding:10px;background:linear-gradient(135deg,#1e3a5f,#0f172a);
-       color:#4ade80;border:1.5px solid rgba(74,222,128,0.45);border-radius:8px;
-       cursor:pointer;font-weight:600;font-size:13px;transition:all .2s;}
-  #btn:hover{background:rgba(74,222,128,0.15);}
-  #st{color:#64748b;font-size:12px;margin-top:5px;text-align:center;min-height:16px;}
+  html,body{margin:0;padding:0;background:transparent;font-family:Inter,sans-serif;}
+  #btn{
+    width:100%;padding:9px 12px;
+    background:linear-gradient(135deg,#1e3a5f,#0f172a);
+    color:#4ade80;border:1.5px solid rgba(74,222,128,0.45);
+    border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;
+    transition:background .2s;
+  }
+  #btn:hover{background:rgba(74,222,128,0.12);}
+  #btn:disabled{opacity:.6;cursor:default;}
+  #msg{color:#64748b;font-size:11.5px;margin-top:5px;text-align:center;min-height:18px;}
+  .coord{
+    background:#1f2937;padding:8px 10px;border-radius:6px;margin-top:6px;
+    color:#4ade80;font-size:12px;font-weight:600;display:none;
+  }
 </style>
 </head><body>
-<button id="btn" onclick="getGPS()">📡 Use GPS / Current Location</button>
-<div id="st"></div>
+<button id="btn" onclick="doGPS()">📡 Use GPS / Current Location</button>
+<div id="msg"></div>
+<div id="coord-box" class="coord"></div>
 <script>
-function getGPS(){
-  var btn=document.getElementById('btn'), st=document.getElementById('st');
+function doGPS(){
+  var btn=document.getElementById('btn'),
+      msg=document.getElementById('msg'),
+      box=document.getElementById('coord-box');
   if(!navigator.geolocation){
-    st.innerHTML='<span style="color:#f87171">Not supported by browser</span>'; return;
+    msg.innerHTML='<span style="color:#f87171">Geolocation not supported</span>';
+    return;
   }
-  btn.textContent='⏳ Detecting...'; btn.disabled=true;
+  btn.textContent='⏳ Locating...'; btn.disabled=true;
+  msg.textContent='Waiting for GPS signal...';
   navigator.geolocation.getCurrentPosition(
     function(p){
       var lat=p.coords.latitude.toFixed(6), lon=p.coords.longitude.toFixed(6);
-      btn.textContent='✅ Location Captured';
-      st.innerHTML='<span style="color:#4ade80">📍 '+lat+', '+lon+'</span><br>'
-                  +'<span style="color:#64748b;font-size:11px;">Enter these below and click Apply</span>';
-      /* copy to hidden inputs so user can see them */
-      var li=document.getElementById('lat-in'), lo=document.getElementById('lon-in');
-      if(li) li.value=lat; if(lo) lo.value=lon;
+      btn.textContent='✅ Captured!';
+      msg.innerHTML='';
+      box.style.display='block';
+      box.innerHTML='📍 '+lat+', '+lon
+        +'<br><span style="color:#64748b;font-size:10.5px;font-weight:400;">'
+        +'Copy these into the fields below, then click Apply</span>';
     },
     function(e){
       btn.textContent='📡 Use GPS / Current Location'; btn.disabled=false;
-      st.innerHTML='<span style="color:#f87171">'+(e.code===1?'Permission denied':'Error getting location')+'</span>';
+      var txt = e.code===1 ? 'Permission denied' : 'Could not get location';
+      msg.innerHTML='<span style="color:#f87171">'+txt+'</span>';
     },
-    {enableHighAccuracy:true,timeout:10000}
+    {enableHighAccuracy:true, timeout:12000, maximumAge:0}
   );
 }
 </script>
-</body></html>""", height=90)
+</body></html>
+""", height=115)
 
-        st.markdown("<div style='color:#64748b;font-size:.75rem;margin-top:4px;'>Enter captured coordinates:</div>",
-                    unsafe_allow_html=True)
-        gps_lat_in = st.number_input("GPS Latitude",  -90.0,  90.0, value=st.session_state.lat, format="%.6f")
-        gps_lon_in = st.number_input("GPS Longitude",-180.0, 180.0, value=st.session_state.lon, format="%.6f")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            gps_lat = st.number_input("Latitude",  -90.0,  90.0,
+                                      value=st.session_state.lat, format="%.6f", key="gps_lat")
+        with col_b:
+            gps_lon = st.number_input("Longitude",-180.0, 180.0,
+                                      value=st.session_state.lon, format="%.6f", key="gps_lon")
+
         if st.button("✅ Apply GPS Coordinates", use_container_width=True):
-            st.session_state.lat = gps_lat_in
-            st.session_state.lon = gps_lon_in
+            st.session_state.lat = gps_lat
+            st.session_state.lon = gps_lon
             loc = detect_location_ip()
             if loc and loc.get("timezone"):
                 st.session_state.timezone = loc["timezone"]
-            st.success(f"📍 GPS applied: {gps_lat_in:.4f}, {gps_lon_in:.4f}")
+            st.success(f"📍 Set: {gps_lat:.4f}, {gps_lon:.4f}")
             st.rerun()
 
-    # ── MANUAL SELECT ─────────────────────────
+    # ── MANUAL SELECT ─────────────────────────────────────────
     elif location_mode == "Manual Select":
-        sel_region = st.selectbox("Region", list(GRID_ZONES.keys()),
+        sel_region = st.selectbox(
+            "Region", list(GRID_ZONES.keys()),
             index=list(GRID_ZONES.keys()).index(st.session_state.selected_region)
-                  if st.session_state.selected_region in GRID_ZONES else 0)
+                  if st.session_state.selected_region in GRID_ZONES else 0
+        )
         st.session_state.selected_region = sel_region
 
-        zones = GRID_ZONES[sel_region]["zones"]
-        sel_zone = st.selectbox("Grid Zone", list(zones.keys()),
+        zones    = GRID_ZONES[sel_region]["zones"]
+        sel_zone = st.selectbox(
+            "Grid Zone", list(zones.keys()),
             index=list(zones.keys()).index(st.session_state.selected_zone)
-                  if st.session_state.selected_zone in zones else 0)
+                  if st.session_state.selected_zone in zones else 0
+        )
         st.session_state.selected_zone = sel_zone
-
         zd = zones[sel_zone]
         st.session_state.lat      = zd["lat"]
         st.session_state.lon      = zd["lon"]
         st.session_state.timezone = GRID_ZONES[sel_region]["timezone"]
 
         st.markdown(f"""
-        <div style="background:#1f2937;padding:.75rem;border-radius:8px;margin-top:.5rem;">
-            <div style="color:#94a3b8;font-size:.75rem;">Grid Zone Info</div>
-            <div style="color:#4ade80;font-size:.875rem;font-weight:600;">Avg CI: {zd['ci_avg']} gCO₂/kWh</div>
-            <div style="color:#64748b;font-size:.75rem;margin-top:.25rem;">{GRID_ZONES[sel_region]["voltage"]}</div>
+        <div style="background:#1f2937;padding:10px 12px;border-radius:8px;margin-top:6px;">
+          <div style="color:#64748b;font-size:.72rem;margin-bottom:2px;">ZONE INFO</div>
+          <div style="color:#4ade80;font-size:.85rem;font-weight:600;">
+            Avg CI: {zd['ci_avg']} gCO₂/kWh
+          </div>
+          <div style="color:#64748b;font-size:.72rem;margin-top:2px;">
+            {GRID_ZONES[sel_region]["voltage"]}
+          </div>
         </div>""", unsafe_allow_html=True)
 
-    # ── CUSTOM COORDINATES ───────────────────
+    # ── CUSTOM COORDINATES ────────────────────────────────────
     else:
-        c1, c2 = st.columns(2)
-        with c1:
-            st.session_state.lat = st.number_input("Latitude",  -90.0,  90.0,
-                                                    value=st.session_state.lat, format="%.4f")
-        with c2:
-            st.session_state.lon = st.number_input("Longitude",-180.0, 180.0,
-                                                    value=st.session_state.lon, format="%.4f")
+        col_c, col_d = st.columns(2)
+        with col_c:
+            st.session_state.lat = st.number_input(
+                "Latitude", -90.0, 90.0, value=st.session_state.lat, format="%.4f")
+        with col_d:
+            st.session_state.lon = st.number_input(
+                "Longitude", -180.0, 180.0, value=st.session_state.lon, format="%.4f")
         tz_opts = pytz.common_timezones
         cur_tz  = st.session_state.timezone if st.session_state.timezone in tz_opts else "UTC"
-        st.session_state.timezone = st.selectbox("Timezone", tz_opts, index=tz_opts.index(cur_tz))
+        st.session_state.timezone = st.selectbox("Timezone", tz_opts,
+                                                  index=tz_opts.index(cur_tz))
 
-    loc_label = st.session_state.selected_zone \
-                if location_mode == "Manual Select" \
-                else ("GPS" if location_mode == "GPS Location" else f"{st.session_state.lat:.2f}, {st.session_state.lon:.2f}")
+    # Location badge
+    _lbl = (st.session_state.selected_zone if location_mode == "Manual Select"
+            else "GPS" if location_mode == "GPS Location"
+            else f"{st.session_state.lat:.2f}°, {st.session_state.lon:.2f}°")
     st.markdown(f"""
-    <div style="margin-top:1rem;">
-        <span class="location-badge">🌍 {loc_label}</span>
+    <div style="margin-top:10px;">
+      <span class="loc-badge">🌍 {_lbl}</span>
     </div>""", unsafe_allow_html=True)
 
     st.divider()
 
-    # ── Live Clock (12-hr) ───────────────────
-    exact_12 = get_current_time_exact_12(st.session_state.timezone)
-    now24    = get_current_time_24(st.session_state.timezone, STEP_MIN)
-    now12    = to_12hr(now24)
+    # ── Live Clock (12-hr, real system time) ─────────────────
+    _exact12 = get_current_time_exact_12(st.session_state.timezone)
+    _now24   = get_current_time_24(st.session_state.timezone, STEP_MIN)
+    _now12   = to_12hr(_now24)
 
     st.markdown(f"""
-    <div class="live-time">🕐 {exact_12}</div>
-    <div class="timezone-info">
-        {st.session_state.timezone}<br>
-        Current slot: {now12}
-    </div>""", unsafe_allow_html=True)
+    <div class="live-time">🕐 {_exact12}</div>
+    <div class="tz-sub">{st.session_state.timezone} &nbsp;|&nbsp; Slot: {_now12}</div>
+    """, unsafe_allow_html=True)
 
     st.divider()
 
-    # ── Data Source ──────────────────────────
-    st.subheader("📁 Data Source")
+    # ── Data Source ───────────────────────────────────────────
+    st.markdown("### 📁 Data Source")
     DS_OPTS = ["Automatic (API)", "Sample Data", "Upload CSV (Admin)"]
-    data_source = st.radio("Select Mode", DS_OPTS,
+    data_source = st.radio(
+        "Source", DS_OPTS,
         index=DS_OPTS.index(st.session_state.data_source)
-              if st.session_state.data_source in DS_OPTS else 0)
+              if st.session_state.data_source in DS_OPTS else 0,
+        label_visibility="collapsed"
+    )
     st.session_state.data_source = data_source
 
     uploaded_file = None
     api_token     = None
 
     if data_source == "Automatic (API)":
-        st.info("🌐 Fetches real-time grid data based on your location")
-        api_token = st.text_input("API Token (Optional)", type="password")
+        st.caption("Fetches real-time data from Electricity Maps based on coordinates.")
+        api_token = st.text_input("API Token (Optional)", type="password",
+                                  placeholder="Free-tier token")
         if st.button("🔄 Refresh Grid Data", use_container_width=True):
             st.cache_data.clear(); st.rerun()
+
     elif data_source == "Upload CSV (Admin)":
-        st.warning("👤 Admin Mode")
-        uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-        with st.expander("📋 Format"):
-            st.markdown("**Required:** `time`, `thermal_mw`, `hydro_mw`, `nuclear_mw`, `res_mw`")
+        st.warning("Admin mode — upload grid generation CSV.")
+        uploaded_file = st.file_uploader("Upload CSV", type=["csv"],
+                                         label_visibility="collapsed")
+        with st.expander("📋 Required format"):
+            st.markdown(
+                "Columns: `time` (HH:MM), `thermal_mw`, `hydro_mw`, "
+                "`nuclear_mw`, `res_mw`"
+            )
+    else:
+        st.caption("Using built-in synthetic grid profile.")
 
     st.divider()
 
-    # ── Appliance ───────────────────────────
-    st.subheader("🔌 Appliance Settings")
-    appliance = st.selectbox("Appliance", list(APPLIANCES.keys()), label_visibility="collapsed")
+    # ── Appliance Settings ────────────────────────────────────
+    st.markdown("### 🔌 Appliance")
+    appliance = st.selectbox("Appliance", list(APPLIANCES.keys()),
+                             label_visibility="collapsed")
     if appliance != st.session_state.appliance:
         info = APPLIANCES[appliance]
-        st.session_state.kw = info["kw"]; st.session_state.duration = info["duration_min"]
-        st.session_state.deadline = info["deadline"]; st.session_state.appliance = appliance
+        st.session_state.kw       = info["kw"]
+        st.session_state.duration = info["duration_min"]
+        st.session_state.deadline = info["deadline"]
+        st.session_state.appliance = appliance
 
-    kw       = st.number_input("Power (kW)",        0.001, value=float(st.session_state.kw),    step=0.05, format="%.3f")
-    duration = st.number_input("Duration (minutes)",   15, value=int(st.session_state.duration), step=15)
-    deadline = st.text_input("Deadline (HH:MM)",        value=st.session_state.deadline)
+    kw       = st.number_input("Power (kW)",        0.001,
+                                value=float(st.session_state.kw),    step=0.05, format="%.3f")
+    duration = st.number_input("Duration (minutes)",   15,
+                                value=int(st.session_state.duration), step=15)
+    deadline = st.text_input("Deadline (HH:MM)", value=st.session_state.deadline,
+                              help="Latest time the appliance must finish")
 
     if not validate_time_format(deadline):
-        st.error("⚠️ Use HH:MM format"); deadline = st.session_state.deadline
+        st.error("⚠️ Use HH:MM (24-hour)"); deadline = st.session_state.deadline
     else:
         st.session_state.deadline = deadline
 
-    now_mins      = time_to_minutes(now24)
-    deadline_mins = time_to_minutes(deadline)
-    avail = (deadline_mins - now_mins) if deadline_mins > now_mins else (1440 - now_mins + deadline_mins)
-    st.info(f"⏱️ Available: **{avail} min** ({avail//60}h {avail%60}m)")
+    _now_mins      = time_to_minutes(_now24)
+    _deadline_mins = time_to_minutes(deadline)
+    _avail = (_deadline_mins - _now_mins) if _deadline_mins > _now_mins \
+             else (1440 - _now_mins + _deadline_mins)
+    st.info(f"⏱️ **{_avail} min** available ({_avail // 60}h {_avail % 60}m)")
 
-    if st.button("🔄 Reset to Default"):
+    if st.button("↩️ Reset to Defaults", use_container_width=True):
         info = APPLIANCES[appliance]
-        st.session_state.kw = info["kw"]; st.session_state.duration = info["duration_min"]
-        st.session_state.deadline = info["deadline"]; st.rerun()
+        st.session_state.kw       = info["kw"]
+        st.session_state.duration = info["duration_min"]
+        st.session_state.deadline = info["deadline"]
+        st.rerun()
 
     st.divider()
-    st.subheader("⚡ Optimization")
-    top_k = st.slider("Top Recommendations", 3, 12, 5)
-    st.session_state.kw = kw; st.session_state.duration = duration
+
+    st.markdown("### ⚡ Optimization")
+    top_k = st.slider("Top Windows to Show", 3, 12, 5)
+
+    # Persist widget values
+    st.session_state.kw       = kw
+    st.session_state.duration = duration
+
+# ──────────────────────  end sidebar  ───────────────────────
+
 
 # ============================================================
 # Data loading
@@ -704,37 +825,42 @@ def load_data_sample():
     if not sf.exists():
         rows = []
         for h in range(24):
-            for m in [0,15,30,45]:
-                lf = 0.6 if h<5 else 0.8 if h<8 else 1.0 if h<12 else 1.1 if h<17 else 1.2 if h<21 else 0.9
-                rows.append({"time":f"{h:02d}:{m:02d}",
-                             "thermal_mw":int(3000*lf*0.6), "hydro_mw":1500,
-                             "nuclear_mw":2000, "res_mw":int(800+(1200 if 10<=h<=16 else 0))})
+            for m in [0, 15, 30, 45]:
+                lf = (0.6 if h < 5 else 0.8 if h < 8 else 1.0 if h < 12
+                      else 1.1 if h < 17 else 1.2 if h < 21 else 0.9)
+                rows.append({
+                    "time": f"{h:02d}:{m:02d}",
+                    "thermal_mw": int(3000 * lf * 0.6), "hydro_mw": 1500,
+                    "nuclear_mw": 2000,
+                    "res_mw": int(800 + (1200 if 10 <= h <= 16 else 0))
+                })
         pd.DataFrame(rows).to_csv(sf, index=False)
     return pd.read_csv(sf)
 
 raw = None
 if st.session_state.data_source == "Automatic (API)":
-    with st.spinner("🌐 Fetching grid data..."):
+    with st.spinner("🌐 Fetching real-time grid data…"):
         raw = load_data_auto(st.session_state.lat, st.session_state.lon, api_token)
     if raw is None:
-        st.warning("⚠️ API failed — using sample data.")
+        st.warning("⚠️ API unavailable — showing sample data.")
         raw = load_data_sample()
 elif st.session_state.data_source == "Sample Data":
     raw = load_data_sample()
 else:
     if uploaded_file:
         try:
-            raw = pd.read_csv(uploaded_file)
-            req = {"time","thermal_mw","hydro_mw","nuclear_mw","res_mw"}
-            miss = req - set(raw.columns)
-            if miss: st.error(f"Missing: {miss}"); st.stop()
+            raw  = pd.read_csv(uploaded_file)
+            miss = {"time","thermal_mw","hydro_mw","nuclear_mw","res_mw"} - set(raw.columns)
+            if miss:
+                st.error(f"Missing columns: {miss}"); st.stop()
         except Exception as e:
-            st.error(str(e)); st.stop()
+            st.error(f"CSV error: {e}"); st.stop()
     else:
-        st.info("Please upload a CSV or switch data source."); st.stop()
+        st.info("⬆️ Please upload a CSV file or switch to Sample / Automatic mode.")
+        st.stop()
 
 if raw is None or raw.empty:
-    st.error("No data available."); st.stop()
+    st.error("❌ No data available."); st.stop()
 
 if "ci" not in raw.columns:
     raw["ci"] = raw.apply(lambda r: compute_ci_g_per_kwh(
@@ -743,273 +869,405 @@ if "ci" not in raw.columns:
 
 df_ci       = raw[["time","ci"]].dropna().sort_values("time").reset_index(drop=True)
 full_day_ci = make_full_day_ci(df_ci)
-now24       = get_current_time_24(st.session_state.timezone, STEP_MIN)
-now12       = to_12hr(now24)
-windows     = recommend_windows(full_day_ci, duration, deadline, top_k, now24)
-current_ci  = find_ci_at_time(full_day_ci, now24) or float(full_day_ci["ci"].mean())
-best        = windows[0] if windows else None
-pot_savings = ((current_ci - best["avg_ci"])/current_ci*100) if (best and current_ci>0) else 0
+
+# Time references — computed AFTER data load so sidebar values are settled
+now24      = get_current_time_24(st.session_state.timezone, STEP_MIN)
+now12      = to_12hr(now24)
+windows    = recommend_windows(full_day_ci, duration, deadline, top_k, now24)
+current_ci = find_ci_at_time(full_day_ci, now24) or float(full_day_ci["ci"].mean())
+best       = windows[0] if windows else None
+pot_sav    = ((current_ci - best["avg_ci"]) / current_ci * 100) if (best and current_ci > 0) else 0
+
 
 # ============================================================
 # KPI row
 # ============================================================
-st.markdown("### 📊 Current Session Overview")
-k1,k2,k3,k4,k5 = st.columns(5)
+st.markdown("### 📊 Session Overview")
+k1, k2, k3, k4, k5 = st.columns(5)
 
 with k1:
-    lbl = (st.session_state.selected_zone if location_mode=="Manual Select"
-           else "GPS" if location_mode=="GPS Location" else "Auto-Detected")
-    st.markdown(f"""<div class="kpi">
-        <div class="metric-label">🌍 Location</div>
-        <div class="metric-value" style="font-size:1.1rem;">{lbl}</div>
-        <div style="color:#64748b;font-size:.72rem;">{st.session_state.timezone}</div>
+    _loc_lbl = (st.session_state.selected_zone if location_mode == "Manual Select"
+                else "GPS" if location_mode == "GPS Location" else "Auto-Detect")
+    st.markdown(f"""
+    <div class="kpi">
+      <div class="metric-label">🌍 Location</div>
+      <div class="metric-value" style="font-size:1rem;">{_loc_lbl}</div>
+      <div class="metric-sub">{st.session_state.timezone}</div>
     </div>""", unsafe_allow_html=True)
 
 with k2:
-    st.markdown(f"""<div class="kpi">
-        <div class="metric-label">🕐 System Time</div>
-        <div class="metric-value" style="font-size:1.35rem;">{now12}</div>
-        <div style="color:#64748b;font-size:.72rem;">Live • 12-hr</div>
+    st.markdown(f"""
+    <div class="kpi">
+      <div class="metric-label">🕐 System Time</div>
+      <div class="metric-value" style="font-size:1.2rem;">{now12}</div>
+      <div class="metric-sub">Live · 12-hr format</div>
     </div>""", unsafe_allow_html=True)
 
 with k3:
-    st.markdown(f"""<div class="kpi">
-        <div class="metric-label">🔌 Appliance</div>
-        <div class="metric-value" style="font-size:1.1rem;">{appliance.split('/')[0].strip()}</div>
-        <div style="color:#64748b;font-size:.72rem;">{kw:.2f} kW • {ceil_to_step(duration)} min</div>
+    st.markdown(f"""
+    <div class="kpi">
+      <div class="metric-label">🔌 Appliance</div>
+      <div class="metric-value" style="font-size:1rem;">{appliance.split('/')[0].strip()}</div>
+      <div class="metric-sub">{kw:.2f} kW · {ceil_to_step(duration)} min</div>
     </div>""", unsafe_allow_html=True)
 
 with k4:
-    cc = get_ci_color(current_ci)
-    st.markdown(f"""<div class="kpi" style="border-left-color:{cc}">
-        <div class="metric-label">⚡ Current CI</div>
-        <div class="metric-value" style="color:{cc}">{current_ci:.0f}</div>
-        <div style="color:#64748b;font-size:.72rem;">{get_ci_status(current_ci)} intensity</div>
+    _cc = get_ci_color(current_ci)
+    st.markdown(f"""
+    <div class="kpi" style="border-left-color:{_cc};">
+      <div class="metric-label">⚡ Carbon Intensity</div>
+      <div class="metric-value" style="color:{_cc};">{current_ci:.0f}</div>
+      <div class="metric-sub">{get_ci_status(current_ci)} · gCO₂/kWh</div>
     </div>""", unsafe_allow_html=True)
 
 with k5:
-    bc = "#4ade80" if best else "#64748b"
-    bt = to_12hr(best["start"]) if best else "--:--"
-    st.markdown(f"""<div class="kpi" style="border-left-color:{bc}">
-        <div class="metric-label">✨ Best Window</div>
-        <div class="metric-value" style="color:{bc};font-size:1.25rem;">{bt}</div>
-        <div style="color:#64748b;font-size:.72rem;">
-            {f"Save ~{pot_savings:.1f}%" if pot_savings>0 else "No savings"}
-        </div>
+    _bc = "#4ade80" if best else "#64748b"
+    _bt = to_12hr(best["start"]) if best else "--:--"
+    st.markdown(f"""
+    <div class="kpi" style="border-left-color:{_bc};">
+      <div class="metric-label">✨ Best Window</div>
+      <div class="metric-value" style="color:{_bc};font-size:1.15rem;">{_bt}</div>
+      <div class="metric-sub">{f"Save ~{pot_sav:.1f}%" if pot_sav > 0 else "No savings"}</div>
     </div>""", unsafe_allow_html=True)
 
 st.markdown("---")
 
+
 # ============================================================
 # Tabs
 # ============================================================
-tab1,tab2,tab3,tab4,tab5 = st.tabs(["📈 Dashboard","🎯 Smart Advisor","📊 Analytics","📝 Logger","🔍 Data"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📈 Dashboard", "🎯 Smart Advisor",
+    "📊 Analytics", "📝 Logger", "🔍 Data"
+])
 
-# ── TAB 1 ─────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# TAB 1 — Dashboard
+# ─────────────────────────────────────────────────────────────
 with tab1:
-    c1,c2 = st.columns([2,1])
-    with c1:
-        st.subheader(f"24-Hour Carbon Intensity • {st.session_state.timezone}")
+    col_chart, col_mix = st.columns([2, 1])
+
+    with col_chart:
+        st.subheader(f"24-Hour Carbon Intensity  ·  {st.session_state.timezone}")
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=full_day_ci["time"], y=full_day_ci["ci"],
-            fill='tozeroy', fillcolor='rgba(74,222,128,0.1)',
-            line=dict(color='#4ade80',width=3),
-            hovertemplate='Time: %{x}<br>CI: %{y:.1f} gCO₂/kWh<extra></extra>'))
-        fig.add_hrect(y0=0,   y1=200, fillcolor="#4ade80", opacity=0.05, line_width=0)
-        fig.add_hrect(y0=200, y1=400, fillcolor="#fbbf24", opacity=0.05, line_width=0)
-        fig.add_hrect(y0=400, y1=800, fillcolor="#f87171", opacity=0.05, line_width=0)
-        for i,w in enumerate((windows or [])[:3]):
-            fig.add_vrect(x0=w["start"],x1=w["end"],fillcolor=w["color"],
-                          opacity=0.25,line_width=2 if i==0 else 1,line_color=w["color"],layer="below")
-        fig.add_vline(x=now24,    line_dash="dash",line_color="#4ade80",line_width=2)
-        fig.add_vline(x=deadline, line_dash="dash",line_color="#f87171",line_width=2)
-        mx = max(full_day_ci["ci"])*1.05
-        fig.add_annotation(x=now24,    y=mx, text="NOW",      showarrow=False, font=dict(color="#4ade80",size=11))
-        fig.add_annotation(x=deadline, y=mx, text="DEADLINE", showarrow=False, font=dict(color="#f87171",size=11))
-        fig.update_layout(plot_bgcolor="#0f172a",paper_bgcolor="#0f172a",
-                          font=dict(color="#f8fafc"),
-                          xaxis=dict(gridcolor="#334155",title="Time",tickangle=-45,nticks=12),
-                          yaxis=dict(gridcolor="#334155",title="gCO₂/kWh",
-                                     range=[0,max(full_day_ci["ci"])*1.15]),
-                          height=450,margin=dict(l=60,r=40,t=40,b=60),showlegend=False)
+        fig.add_trace(go.Scatter(
+            x=full_day_ci["time"], y=full_day_ci["ci"],
+            fill="tozeroy", fillcolor="rgba(74,222,128,0.08)",
+            line=dict(color="#4ade80", width=2.5),
+            hovertemplate="<b>%{x}</b><br>CI: %{y:.1f} gCO₂/kWh<extra></extra>"
+        ))
+        fig.add_hrect(y0=0,   y1=200, fillcolor="#4ade80", opacity=0.04, line_width=0)
+        fig.add_hrect(y0=200, y1=400, fillcolor="#fbbf24", opacity=0.04, line_width=0)
+        fig.add_hrect(y0=400, y1=900, fillcolor="#f87171", opacity=0.04, line_width=0)
+
+        for i, w in enumerate((windows or [])[:3]):
+            fig.add_vrect(x0=w["start"], x1=w["end"], fillcolor=w["color"],
+                          opacity=0.22, line_width=2 if i == 0 else 1,
+                          line_color=w["color"], layer="below")
+
+        _mx = max(full_day_ci["ci"]) * 1.08
+        fig.add_vline(x=now24,    line_dash="dash", line_color="#4ade80", line_width=1.8)
+        fig.add_vline(x=deadline, line_dash="dash", line_color="#f87171", line_width=1.8)
+        fig.add_annotation(x=now24,    y=_mx, text="NOW",      showarrow=False,
+                           font=dict(color="#4ade80", size=11), bgcolor="rgba(15,23,42,.7)")
+        fig.add_annotation(x=deadline, y=_mx, text="DEADLINE", showarrow=False,
+                           font=dict(color="#f87171", size=11), bgcolor="rgba(15,23,42,.7)")
+
+        fig.update_layout(
+            plot_bgcolor="#0f172a", paper_bgcolor="#0f172a",
+            font=dict(color="#cbd5e1"),
+            xaxis=dict(gridcolor="#1e293b", title="Time of Day", tickangle=-45, nticks=13),
+            yaxis=dict(gridcolor="#1e293b", title="gCO₂/kWh",
+                       range=[0, max(full_day_ci["ci"]) * 1.18]),
+            height=420, margin=dict(l=55, r=30, t=30, b=55),
+            showlegend=False
+        )
         st.plotly_chart(fig, use_container_width=True)
 
-    with c2:
+    with col_mix:
         st.subheader("Grid Mix")
         latest = raw.iloc[-1]
-        total  = sum(safe_float(latest[c]) for c in ["thermal_mw","hydro_mw","nuclear_mw","res_mw"])
+        vals   = [safe_float(latest[c]) for c in ["thermal_mw","hydro_mw","nuclear_mw","res_mw"]]
+        total  = sum(vals)
         fig2 = go.Figure(data=[go.Pie(
-            labels=["Thermal","Hydro","Nuclear","Renewable"],
-            values=[safe_float(latest["thermal_mw"]),safe_float(latest["hydro_mw"]),
-                    safe_float(latest["nuclear_mw"]),safe_float(latest["res_mw"])],
+            labels=["Thermal","Hydro","Nuclear","Renewable"], values=vals,
             hole=0.65, marker_colors=["#f87171","#60a5fa","#a78bfa","#4ade80"],
-            textinfo="label+percent",textfont=dict(color="white",size=11))])
-        fig2.update_layout(plot_bgcolor="#0f172a",paper_bgcolor="#0f172a",
-                           font=dict(color="#f8fafc"),height=380,showlegend=False,
-                           margin=dict(t=20,b=20,l=20,r=20),
-                           annotations=[dict(text=f"<b>{total/1000:.1f}</b><br>GW",
-                                             x=0.5,y=0.5,font_size=20,font_color="#f8fafc",showarrow=False)])
+            textinfo="label+percent",
+            textfont=dict(color="white", size=10.5)
+        )])
+        fig2.update_layout(
+            plot_bgcolor="#0f172a", paper_bgcolor="#0f172a",
+            font=dict(color="#cbd5e1"), height=340,
+            showlegend=False, margin=dict(t=15, b=15, l=10, r=10),
+            annotations=[dict(
+                text=f"<b>{total/1000:.1f}</b><br>GW",
+                x=0.5, y=0.5, font_size=18, font_color="#f8fafc", showarrow=False
+            )]
+        )
         st.plotly_chart(fig2, use_container_width=True)
 
-# ── TAB 2 ─────────────────────────────────────────────────
-with tab2:
-    st.subheader(f"🏆 Top {top_k} Windows ({now12} → {to_12hr(deadline)}) • {st.session_state.timezone}")
-    if not windows:
-        st.warning("⚠️ No valid windows. Try extending deadline or reducing duration.")
-    else:
-        for row_start in range(0, len(windows), 3):
-            rw   = windows[row_start:row_start+3]
-            cols = st.columns(len(rw))
-            for i,(col,w) in enumerate(zip(cols,rw)):
-                gi   = row_start+i
-                rank = gi+1
-                with col:
-                    hrs  = ceil_to_step(duration)/60
-                    nrg  = float(kw)*hrs
-                    co2  = calculate_co2(nrg, w["avg_ci"])
-                    co2n = calculate_co2(nrg, current_ci)
-                    sav  = co2n - co2
-                    ib   = gi==0
-                    brd  = "border:2px solid #4ade80;" if ib else "border:1px solid #374151;"
-                    st.markdown(f"""
-                    <div class="card" style="{brd}">
-                      <div style="text-align:center;margin-bottom:.5rem;">
-                        <span style="background:{'#4ade80' if ib else '#374151'};
-                                     color:{'#0f172a' if ib else 'white'};
-                                     padding:.25rem .75rem;border-radius:6px;
-                                     font-size:.75rem;font-weight:700;">
-                          {'🥇 BEST' if rank==1 else f'#{rank}'}
-                        </span>
-                      </div>
-                      <div style="font-size:1.2rem;font-weight:800;color:white;text-align:center;">
-                        {to_12hr(w["start"])} → {to_12hr(w["end"])}
-                      </div>
-                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.75rem;">
-                        <div style="background:#0f172a;padding:.5rem;border-radius:8px;text-align:center;">
-                          <div style="color:#64748b;font-size:.7rem;">CI</div>
-                          <div style="color:{w['color']};font-size:1rem;font-weight:700;">{w["avg_ci"]:.0f}</div>
-                        </div>
-                        <div style="background:#0f172a;padding:.5rem;border-radius:8px;text-align:center;">
-                          <div style="color:#64748b;font-size:.7rem;">CO₂</div>
-                          <div style="color:white;font-size:1rem;font-weight:700;">{co2:.3f}kg</div>
-                        </div>
-                      </div>
-                      <div style="background:rgba(74,222,128,.1);padding:.4rem;border-radius:6px;
-                                  text-align:center;margin-top:.5rem;">
-                        <span style="color:#4ade80;font-size:.8rem;">💰 Save {sav:.3f} kg</span>
-                      </div>
-                    </div>""", unsafe_allow_html=True)
-                    if st.button("✅ Select", key=f"sel_{gi}", use_container_width=True):
-                        st.session_state.selected_window = gi
-                        st.success(f"Selected: {to_12hr(w['start'])} - {to_12hr(w['end'])}")
+        # Zone CI summary
+        _zone_ci = (GRID_ZONES.get(st.session_state.selected_region, {})
+                    .get("zones", {}).get(st.session_state.selected_zone, {})
+                    .get("ci_avg", "—"))
+        st.markdown(f"""
+        <div style="background:#1e293b;border-radius:10px;padding:12px 14px;margin-top:6px;">
+          <div style="color:#64748b;font-size:.72rem;margin-bottom:3px;">ZONE AVERAGE CI</div>
+          <div style="color:#fbbf24;font-size:1.4rem;font-weight:800;">{_zone_ci}</div>
+          <div style="color:#64748b;font-size:.72rem;">gCO₂/kWh historical avg</div>
+        </div>""", unsafe_allow_html=True)
 
-# ── TAB 3 ─────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────
+# TAB 2 — Smart Advisor
+# ─────────────────────────────────────────────────────────────
+with tab2:
+    st.subheader(f"🏆 Top {top_k} Optimal Windows  ·  {now12} → {to_12hr(deadline)}")
+
+    if not windows:
+        st.warning("⚠️ No valid windows found — try extending the deadline or reducing duration.")
+        st.info(f"""
+**Debug:**  
+- Current time: {now12}  
+- Deadline: {to_12hr(deadline)}  
+- Duration needed: {ceil_to_step(duration)} min  
+- Available: {_avail} min
+""")
+    else:
+        _hrs = ceil_to_step(duration) / 60
+        _nrg = float(kw) * _hrs
+
+        for row_start in range(0, len(windows), 3):
+            rw   = windows[row_start:row_start + 3]
+            cols = st.columns(len(rw))
+            for i, (col, w) in enumerate(zip(cols, rw)):
+                gi   = row_start + i
+                rank = gi + 1
+                with col:
+                    co2  = calculate_co2(_nrg, w["avg_ci"])
+                    co2n = calculate_co2(_nrg, current_ci)
+                    sav  = co2n - co2
+                    ib   = gi == 0
+                    brd  = "border:2px solid #4ade80;" if ib else "border:1px solid #2d3f55;"
+
+                    st.markdown(f"""
+<div class="rec-card" style="{brd}border-radius:12px;">
+  <div style="text-align:center;margin-bottom:8px;">
+    <span style="background:{'#4ade80' if ib else '#1e3a5f'};
+                 color:{'#0f172a' if ib else '#94a3b8'};
+                 padding:3px 10px;border-radius:5px;font-size:.72rem;font-weight:700;">
+      {'🥇 BEST' if rank==1 else f'#{rank}'}
+    </span>
+  </div>
+  <div style="font-size:1.1rem;font-weight:800;color:white;text-align:center;
+              margin-bottom:10px;line-height:1.3;">
+    {to_12hr(w["start"])}<br>
+    <span style="color:#64748b;font-size:.8rem;">to</span><br>
+    {to_12hr(w["end"])}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+    <div style="background:#0f172a;padding:8px 4px;border-radius:8px;text-align:center;">
+      <div style="color:#64748b;font-size:.65rem;margin-bottom:2px;">CI</div>
+      <div style="color:{w['color']};font-size:.95rem;font-weight:700;">{w["avg_ci"]:.0f}</div>
+    </div>
+    <div style="background:#0f172a;padding:8px 4px;border-radius:8px;text-align:center;">
+      <div style="color:#64748b;font-size:.65rem;margin-bottom:2px;">CO₂</div>
+      <div style="color:white;font-size:.95rem;font-weight:700;">{co2:.3f} kg</div>
+    </div>
+  </div>
+  <div style="background:rgba(74,222,128,.08);padding:6px;border-radius:6px;
+              text-align:center;margin-top:8px;border:1px solid rgba(74,222,128,.2);">
+    <span style="color:#4ade80;font-size:.8rem;font-weight:600;">
+      💰 Save {sav:.3f} kg CO₂
+    </span>
+  </div>
+</div>""", unsafe_allow_html=True)
+
+                    if st.button("✅ Select this window",
+                                 key=f"sel_{gi}", use_container_width=True):
+                        st.session_state.selected_window = gi
+                        st.success(f"✅ Selected: {to_12hr(w['start'])} – {to_12hr(w['end'])}")
+
+
+# ─────────────────────────────────────────────────────────────
+# TAB 3 — Analytics
+# ─────────────────────────────────────────────────────────────
 with tab3:
     st.subheader("📊 Baseline vs Optimized")
-    hrs  = ceil_to_step(duration)/60
-    nrg  = float(kw)*hrs
-    co2n = calculate_co2(nrg, current_ci)
-    co2b = calculate_co2(nrg, best["avg_ci"]) if best else co2n
-    proj = co2n - co2b
-    pct  = (proj/co2n*100) if co2n>0 else 0
 
+    _hrs  = ceil_to_step(duration) / 60
+    _nrg  = float(kw) * _hrs
+    co2n  = calculate_co2(_nrg, current_ci)
+    co2b  = calculate_co2(_nrg, best["avg_ci"]) if best else co2n
+    proj  = co2n - co2b
+    pct   = (proj / co2n * 100) if co2n > 0 else 0
+
+    # Context banner
+    _loc_str = (st.session_state.selected_zone if location_mode == "Manual Select"
+                else f"{st.session_state.lat:.3f}°, {st.session_state.lon:.3f}°")
     st.markdown(f"""
-    <div style="background:#1e293b;padding:1rem;border-radius:8px;margin-bottom:1rem;">
-      <div style="color:#94a3b8;font-size:.875rem;">Location</div>
-      <div style="color:white;font-size:1rem;">
-        {st.session_state.selected_zone if location_mode=="Manual Select"
-         else f"Lat:{st.session_state.lat:.2f} Lon:{st.session_state.lon:.2f}"}
-        • {st.session_state.timezone}
-      </div>
+    <div style="background:#1e293b;border-radius:10px;padding:12px 16px;
+                margin-bottom:1rem;border-left:3px solid #3b82f6;">
+      <span style="color:#94a3b8;font-size:.8rem;">📍 {_loc_str}</span>
+      <span style="color:#475569;font-size:.8rem;margin:0 8px;">|</span>
+      <span style="color:#94a3b8;font-size:.8rem;">🕐 {st.session_state.timezone}</span>
+      <span style="color:#475569;font-size:.8rem;margin:0 8px;">|</span>
+      <span style="color:#94a3b8;font-size:.8rem;">📡 {st.session_state.data_source}</span>
     </div>""", unsafe_allow_html=True)
 
     fc = go.Figure()
-    fc.add_trace(go.Bar(name='Baseline (Now)',    x=['CO₂'],y=[co2n],
-                        marker_color='#f87171',text=[f'{co2n:.3f} kg'],textposition='outside',width=0.35))
-    fc.add_trace(go.Bar(name='Optimized (Best)', x=['CO₂'],y=[co2b],
-                        marker_color='#4ade80',text=[f'{co2b:.3f} kg'],textposition='outside',width=0.35))
-    fc.update_layout(barmode='group',plot_bgcolor="#0f172a",paper_bgcolor="#0f172a",
-                     font=dict(color="#f8fafc",size=14),height=350,showlegend=True,
-                     legend=dict(orientation="h",yanchor="bottom",y=1.02,xanchor="center",x=0.5),
-                     yaxis=dict(title="CO₂ (kg)",gridcolor="#334155"),
-                     title=dict(text=f"💰 Savings: {proj:.3f} kg ({pct:.1f}%)",
-                                font=dict(size=16,color="#4ade80")))
+    fc.add_trace(go.Bar(
+        name="Baseline (Now)", x=["CO₂ Emissions"], y=[co2n],
+        marker_color="#f87171",
+        text=[f"{co2n:.3f} kg"], textposition="outside", width=0.28
+    ))
+    fc.add_trace(go.Bar(
+        name="Optimized (Best)", x=["CO₂ Emissions"], y=[co2b],
+        marker_color="#4ade80",
+        text=[f"{co2b:.3f} kg"], textposition="outside", width=0.28
+    ))
+    fc.update_layout(
+        barmode="group",
+        plot_bgcolor="#0f172a", paper_bgcolor="#0f172a",
+        font=dict(color="#cbd5e1", size=13), height=340,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        yaxis=dict(title="CO₂ (kg)", gridcolor="#1e293b", range=[0, max(co2n, co2b) * 1.35]),
+        margin=dict(l=50, r=30, t=50, b=40),
+        title=dict(text=f"💰 Potential savings: {proj:.3f} kg CO₂ ({pct:.1f}%)",
+                   font=dict(size=14, color="#4ade80"))
+    )
     st.plotly_chart(fc, use_container_width=True)
 
-    s1,s2,s3 = st.columns(3)
-    with s1: st.metric("🔴 Baseline",  f"{co2n:.3f} kg")
-    with s2: st.metric("🟢 Optimized", f"{co2b:.3f} kg")
-    with s3: st.metric("💰 Savings",   f"{pct:.1f}%", delta=f"-{proj:.3f} kg", delta_color="inverse")
+    m1, m2, m3 = st.columns(3)
+    with m1: st.metric("🔴 Baseline",  f"{co2n:.3f} kg",
+                       help=f"Running now at CI = {current_ci:.0f}")
+    with m2: st.metric("🟢 Optimized", f"{co2b:.3f} kg",
+                       help=f"Best window CI = {best['avg_ci']:.0f}" if best else "N/A")
+    with m3: st.metric("💰 Savings",   f"{pct:.1f}%",
+                       delta=f"-{proj:.3f} kg", delta_color="inverse")
 
     log_df = read_log()
-    if len(log_df)>0:
-        with st.expander("📋 Run History"):
-            st.dataframe(log_df.sort_values("timestamp",ascending=False),
-                         use_container_width=True, hide_index=True)
+    if not log_df.empty:
+        st.markdown("---")
+        st.subheader("📋 Run History")
+        st.dataframe(
+            log_df.sort_values("timestamp", ascending=False),
+            use_container_width=True, hide_index=True
+        )
 
-# ── TAB 4 ─────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────
+# TAB 4 — Logger
+# ─────────────────────────────────────────────────────────────
 with tab4:
     ensure_dirs()
-    st.subheader("📝 Log Appliance Run")
-    with st.form("run_form"):
-        st.markdown(f"**System Time:** {get_current_time_exact_12(st.session_state.timezone)} ({st.session_state.timezone})")
-        fc1,fc2,fc3 = st.columns(3)
-        with fc1:
+    st.subheader("📝 Log an Appliance Run")
+    st.caption(f"System time: **{get_current_time_exact_12(st.session_state.timezone)}** "
+               f"({st.session_state.timezone})")
+
+    with st.form("run_form", clear_on_submit=False):
+        r1, r2, r3 = st.columns(3)
+        with r1:
             run_date = st.date_input("Date", datetime.now())
-            run_type = st.selectbox("Run Type",["recommended","baseline","test"])
-        with fc2:
-            def_start  = (windows[st.session_state.selected_window]["start"]
-                          if windows and st.session_state.selected_window < len(windows) else now24)
-            start_time = st.text_input("Start Time (HH:MM)", def_start)
-            run_dur    = st.number_input("Duration (min)", 15, value=ceil_to_step(int(duration)), step=15)
-        with fc3:
+            run_type = st.selectbox("Run Type", ["recommended", "baseline", "test"])
+        with r2:
+            _def_start = (windows[st.session_state.selected_window]["start"]
+                          if windows and st.session_state.selected_window < len(windows)
+                          else now24)
+            start_time = st.text_input("Start Time (HH:MM)", value=_def_start)
+            run_dur    = st.number_input("Duration (min)", 15,
+                                         value=ceil_to_step(int(duration)), step=15)
+        with r3:
             run_app = st.selectbox("Appliance", list(APPLIANCES.keys()))
-            notes   = st.text_input("Notes",
-                                    f"Loc:{st.session_state.selected_zone if location_mode=='Manual Select' else 'Auto'}")
-        mc1,mc2 = st.columns(2)
-        with mc1: mb = st.number_input("Meter Before (kWh)", 0.0, format="%.3f")
-        with mc2: ma = st.number_input("Meter After (kWh)",  0.0, format="%.3f")
-        if st.form_submit_button("💾 Save", use_container_width=True):
-            kwh = ma - mb
-            if kwh <= 0:
-                st.error("'After' must be > 'Before'")
-            else:
-                ci_v = find_ci_at_time(full_day_ci, start_time) or float(full_day_ci["ci"].mean())
-                et   = minutes_to_time(time_to_minutes(start_time) + ceil_to_step(int(run_dur)))
-                row  = {"timestamp":datetime.now().isoformat(),"date":str(run_date),
-                        "run_type":run_type,"appliance":run_app,
-                        "start_time":start_time,"end_time":et,
-                        "kwh_used":round(float(kwh),4),
-                        "avg_ci_g_per_kwh":round(float(ci_v),2),
-                        "co2_kg":round(calculate_co2(kwh,ci_v),4),
-                        "location":(st.session_state.selected_zone if location_mode=="Manual Select"
-                                    else f"{st.session_state.lat:.2f},{st.session_state.lon:.2f}"),
-                        "timezone":st.session_state.timezone,"notes":notes}
-                append_log(row); read_log.clear()
-                st.success(f"✅ {kwh:.3f} kWh · {calculate_co2(kwh,ci_v):.4f} kg CO₂")
-                if run_type=="recommended": st.balloons()
+            notes   = st.text_input(
+                "Notes",
+                value=f"Zone: {st.session_state.selected_zone if location_mode == 'Manual Select' else 'Auto'}"
+            )
 
-# ── TAB 5 ─────────────────────────────────────────────────
+        st.markdown("##### Meter Reading")
+        m1c, m2c = st.columns(2)
+        with m1c:
+            mb = st.number_input("Before (kWh)", min_value=0.0, format="%.3f")
+        with m2c:
+            ma = st.number_input("After (kWh)",  min_value=0.0, format="%.3f")
+
+        submitted = st.form_submit_button("💾 Save Run", use_container_width=True)
+
+    if submitted:
+        kwh = ma - mb
+        if kwh <= 0:
+            st.error("❌ 'After' reading must be greater than 'Before'.")
+        else:
+            ci_v = find_ci_at_time(full_day_ci, start_time) or float(full_day_ci["ci"].mean())
+            et   = minutes_to_time(time_to_minutes(start_time) + ceil_to_step(int(run_dur)))
+            _row = {
+                "timestamp":        datetime.now().isoformat(),
+                "date":             str(run_date),
+                "run_type":         run_type,
+                "appliance":        run_app,
+                "start_time":       start_time,
+                "end_time":         et,
+                "kwh_used":         round(float(kwh), 4),
+                "avg_ci_g_per_kwh": round(float(ci_v), 2),
+                "co2_kg":           round(calculate_co2(kwh, ci_v), 4),
+                "location":         (st.session_state.selected_zone
+                                     if location_mode == "Manual Select"
+                                     else f"{st.session_state.lat:.2f},{st.session_state.lon:.2f}"),
+                "timezone":         st.session_state.timezone,
+                "notes":            notes
+            }
+            append_log(_row)
+            read_log.clear()
+            st.success(f"✅ Saved — {kwh:.3f} kWh · {calculate_co2(kwh, ci_v):.4f} kg CO₂")
+            if run_type == "recommended":
+                st.balloons()
+
+
+# ─────────────────────────────────────────────────────────────
+# TAB 5 — Data
+# ─────────────────────────────────────────────────────────────
 with tab5:
-    st.subheader("🔍 Raw Data & Config")
-    with st.expander("📍 Location Config"):
-        st.json({"Mode":location_mode,"Lat":st.session_state.lat,
-                 "Lon":st.session_state.lon,"Timezone":st.session_state.timezone,
-                 "Data Source":st.session_state.data_source})
-        if st.button("💾 Save Config"):
-            save_location_config({"lat":st.session_state.lat,"lon":st.session_state.lon,
-                                  "timezone":st.session_state.timezone})
-            st.success("Saved!")
+    st.subheader("🔍 Raw Grid Data & Configuration")
 
-    cols_show = [c for c in ["time","thermal_mw","hydro_mw","nuclear_mw","res_mw","ci"] if c in raw.columns]
-    st.dataframe(raw[cols_show].sort_values("time"), use_container_width=True, hide_index=True)
+    # Location config panel
+    with st.expander("📍 Current Location Configuration", expanded=False):
+        st.json({
+            "Mode":        location_mode,
+            "Latitude":    st.session_state.lat,
+            "Longitude":   st.session_state.lon,
+            "Timezone":    st.session_state.timezone,
+            "Data Source": st.session_state.data_source
+        })
+        if st.button("💾 Save Config to File"):
+            save_location_config({
+                "lat": st.session_state.lat, "lon": st.session_state.lon,
+                "timezone": st.session_state.timezone
+            })
+            st.success("✅ Configuration saved to config/location.json")
 
-    d1,d2 = st.columns(2)
-    with d1:
-        st.download_button("📥 Download CSV",
-                           data=raw[cols_show].to_csv(index=False).encode(),
-                           file_name=f"carbonwise_{st.session_state.lat:.2f}_{st.session_state.lon:.2f}.csv",
-                           mime="text/csv")
-    with d2:
-        if st.button("🔄 Refresh Data"):
-            st.cache_data.clear(); st.rerun()
+    st.markdown("---")
+
+    # Raw data table — full width, no overlap
+    cols_show = [c for c in ["time","thermal_mw","hydro_mw","nuclear_mw","res_mw","ci"]
+                 if c in raw.columns]
+    st.markdown("#### Grid Data Table")
+    st.dataframe(
+        raw[cols_show].sort_values("time").reset_index(drop=True),
+        use_container_width=True, hide_index=True, height=380
+    )
+
+    st.markdown("---")
+
+    # Download + Refresh — stacked, not side-by-side, to prevent overlap
+    st.markdown("#### Export / Refresh")
+    _csv_bytes = raw[cols_show].to_csv(index=False).encode()
+    st.download_button(
+        label="📥 Download CSV",
+        data=_csv_bytes,
+        file_name=f"carbonwise_{st.session_state.lat:.2f}_{st.session_state.lon:.2f}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+    if st.button("🔄 Refresh All Data", use_container_width=True):
+        st.cache_data.clear(); st.rerun()
