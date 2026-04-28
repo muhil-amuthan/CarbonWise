@@ -1,4 +1,6 @@
 streamlit
 pandas
-numpy
 plotly
+numpy
+requests
+pytz
