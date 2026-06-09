@@ -1,6 +1,6 @@
 """
 CarbonWise ⚡ — Real-Time Grid Carbon Intensity Scheduler
-Enhanced UI with better spacing and modern theme
+Enhanced UI: Better spacing, typography, and modern attractive theme
 """
 
 import math
@@ -36,14 +36,16 @@ log = logging.getLogger("carbonwise")
 # ──────────────────────────────────────────────────────────────
 # 1. Constants & lookup tables
 # ──────────────────────────────────────────────────────────────
-STEP_MIN    = 15
+STEP_MIN    = 15          # scheduling granularity
 LOG_FILE    = Path("logs/runs.jsonl")
 CONFIG_FILE = Path("config/location.json")
 DATA_DIR    = Path("data")
 EM_API_BASE = "https://api-access.electricitymaps.com/free-tier"
 
+# Weighted g CO₂ / kWh per source
 SOURCE_FACTORS = {"thermal": 820.0, "hydro": 24.0, "nuclear": 12.0, "res": 50.0}
 
+# CO₂ equivalence denominators  (kg CO₂ per unit)
 CO2_EQUIV = {
     "🌳 Tree-days (absorption)": 0.021,
     "🚗 km not driven":          0.192,
@@ -51,6 +53,7 @@ CO2_EQUIV = {
     "📱 phone charges":          0.00844,
 }
 
+# Hour-of-day demand multipliers (0–23)
 HOUR_DEMAND = [
     0.62, 0.58, 0.55, 0.53, 0.54, 0.62,
     0.78, 0.92, 1.08, 1.15, 1.10, 1.05,
@@ -58,6 +61,7 @@ HOUR_DEMAND = [
     1.25, 1.22, 1.15, 1.05, 0.92, 0.75,
 ]
 
+# Day-of-week (Mon=0) demand multipliers
 DOW_DEMAND = {0: 1.05, 1: 1.08, 2: 1.06, 3: 1.04, 4: 1.03, 5: 0.88, 6: 0.82}
 
 GRID_ZONES = {
@@ -141,17 +145,21 @@ def safe_float(v, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return default
 
+
 def ceil15(minutes: int) -> int:
     m = int(minutes)
     return m if m % STEP_MIN == 0 else m + (STEP_MIN - m % STEP_MIN)
+
 
 def hm_to_mins(hhmm: str) -> int:
     h, m = map(int, hhmm.split(":"))
     return h * 60 + m
 
+
 def mins_to_hm(total: int) -> str:
     total = int(total) % 1440
     return f"{total // 60:02d}:{total % 60:02d}"
+
 
 def to_12h(hhmm: str) -> str:
     try:
@@ -161,6 +169,7 @@ def to_12h(hhmm: str) -> str:
     except ValueError:
         return hhmm
 
+
 def valid_hhmm(s: str) -> bool:
     try:
         h, m = map(int, s.split(":"))
@@ -168,16 +177,20 @@ def valid_hhmm(s: str) -> bool:
     except (ValueError, AttributeError):
         return False
 
+
 def ci_color(ci: float) -> str:
     ci = safe_float(ci, 500)
     return "#10b981" if ci < 200 else "#f59e0b" if ci < 400 else "#ef4444"
+
 
 def ci_label(ci: float) -> str:
     ci = safe_float(ci, 500)
     return "Low" if ci < 200 else "Medium" if ci < 400 else "High"
 
+
 def ci_emoji(ci: float) -> str:
     return "🟢" if ci < 200 else "🟡" if ci < 400 else "🔴"
+
 
 def compute_ci(thermal: float, hydro: float, nuclear: float, res: float) -> float:
     vals = {
@@ -191,11 +204,14 @@ def compute_ci(thermal: float, hydro: float, nuclear: float, res: float) -> floa
         return 400.0
     return sum(vals[k] * SOURCE_FACTORS[k] for k in vals) / total
 
+
 def co2_kg(kwh: float, ci_g_kwh: float) -> float:
     return safe_float(kwh) * safe_float(ci_g_kwh) / 1000.0
 
+
 def co2_equivalents(saved_kg: float) -> dict:
     return {k: saved_kg / v for k, v in CO2_EQUIV.items()}
+
 
 def now_tz(tz_str: str) -> datetime:
     try:
@@ -203,20 +219,24 @@ def now_tz(tz_str: str) -> datetime:
     except Exception:
         return datetime.now(pytz.UTC)
 
+
 def slot_str(tz_str: str) -> str:
     n = now_tz(tz_str)
     return f"{n.hour:02d}:{(n.minute // STEP_MIN) * STEP_MIN:02d}"
+
 
 def exact_time_str(tz_str: str) -> str:
     n = now_tz(tz_str)
     p = "AM" if n.hour < 12 else "PM"
     return f"{(n.hour % 12) or 12}:{n.minute:02d}:{n.second:02d} {p}"
 
+
 # ──────────────────────────────────────────────────────────────
 # 3. DataEngine
 # ──────────────────────────────────────────────────────────────
 
 class DataEngine:
+
     @staticmethod
     def _simulate_profile(base_ci: float, seed: int) -> pd.DataFrame:
         rng = np.random.default_rng(seed)
@@ -385,6 +405,7 @@ class DataEngine:
                     best_ci   = z["ci_avg"]
         return best_ci
 
+
 # ──────────────────────────────────────────────────────────────
 # 4. Persistence helpers
 # ──────────────────────────────────────────────────────────────
@@ -395,10 +416,12 @@ def ensure_dirs():
     if not LOG_FILE.exists():
         LOG_FILE.write_text("", encoding="utf-8")
 
+
 def append_log(row: dict):
     ensure_dirs()
     with open(LOG_FILE, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(row) + "\n")
+
 
 @st.cache_data(ttl=60)
 def read_log() -> pd.DataFrame:
@@ -412,6 +435,7 @@ def read_log() -> pd.DataFrame:
             except json.JSONDecodeError:
                 pass
     return pd.DataFrame(rows) if rows else pd.DataFrame()
+
 
 def compute_stats(df: pd.DataFrame) -> dict:
     if df.empty:
@@ -454,6 +478,7 @@ def compute_stats(df: pd.DataFrame) -> dict:
     return {"runs": runs, "rec": rec, "co2": total_co2, "kwh": total_kwh,
             "streak": streak, "badges": badges, "log_dates": log_dates}
 
+
 def detect_ip_location() -> Optional[dict]:
     try:
         r = requests.get("https://ipapi.co/json/", timeout=5)
@@ -468,282 +493,170 @@ def detect_ip_location() -> Optional[dict]:
         pass
     return None
 
+
 # ──────────────────────────────────────────────────────────────
-# 5. ADAPTIVE CSS — Light & Dark Theme Support
+# 5. Enhanced Global CSS — Modern, Attractive, Well-Spaced Theme
 # ──────────────────────────────────────────────────────────────
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-/* ═══════════════════════════════════════════════════════════
-   CSS CUSTOM PROPERTIES — DARK THEME (default)
-   ═══════════════════════════════════════════════════════════ */
+/* ── CSS Variables ── */
 :root {
-    --bg-primary:        #0f0c29;
-    --bg-secondary:      #1a1625;
-    --bg-card:           rgba(30, 27, 75, 0.95);
-    --bg-card-alt:       rgba(20, 18, 50, 0.95);
-    --bg-input:          rgba(30, 27, 75, 0.6);
-    --bg-hover:          rgba(139, 92, 246, 0.1);
-
-    --text-primary:      #e2e8f0;
-    --text-secondary:    #cbd5e1;
-    --text-muted:        #94a3b8;
-    --text-faint:        #64748b;
-
-    --border-primary:    rgba(139, 92, 246, 0.3);
-    --border-hover:      rgba(139, 92, 246, 0.6);
-    --border-subtle:     rgba(139, 92, 246, 0.15);
-
-    --accent-purple:     #8b5cf6;
-    --accent-green:      #10b981;
-    --accent-blue:       #3b82f6;
-    --accent-amber:      #f59e0b;
-    --accent-red:        #ef4444;
-    --accent-violet:     #a78bfa;
-
-    --shadow-card:       0 8px 32px rgba(0, 0, 0, 0.3);
-    --shadow-hover:      0 12px 48px rgba(139, 92, 246, 0.25);
-    --shadow-green:      0 8px 24px rgba(16, 185, 129, 0.2);
-
-    --nav-bg:            rgba(15, 12, 41, 0.97);
-    --nav-border:        rgba(139, 92, 246, 0.25);
-    --nav-item-hover:    rgba(139, 92, 246, 0.15);
-    --nav-item-active-bg: linear-gradient(135deg, #667eea, #764ba2);
-    --nav-item-active-text: #ffffff;
-    --nav-item-text:     #94a3b8;
-
-    --hero-gradient:     linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --page-gradient:     linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-
-    --hr-gradient:       linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.3), transparent);
-    --divider-color:     rgba(139, 92, 246, 0.2);
-
-    --chart-grid:        rgba(139, 92, 246, 0.15);
-    --chart-bg:          rgba(15, 12, 41, 0.4);
-    --chart-paper:       rgba(0,0,0,0);
+    --bg-primary: #0a0f1a;
+    --bg-secondary: #111827;
+    --bg-card: #151d2e;
+    --bg-card-hover: #1a2335;
+    --bg-sidebar: #0d1321;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --border-color: #1e293b;
+    --border-light: #1a2535;
+    --accent-green: #10b981;
+    --accent-green-soft: rgba(16, 185, 129, 0.12);
+    --accent-green-glow: rgba(16, 185, 129, 0.15);
+    --accent-blue: #3b82f6;
+    --accent-blue-soft: rgba(59, 130, 246, 0.12);
+    --accent-cyan: #06b6d4;
+    --accent-amber: #f59e0b;
+    --accent-amber-soft: rgba(245, 158, 11, 0.12);
+    --accent-purple: #8b5cf6;
+    --accent-red: #ef4444;
+    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.3);
+    --shadow-glow: 0 0 40px rgba(16, 185, 129, 0.08);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   LIGHT THEME OVERRIDES
-   ═══════════════════════════════════════════════════════════ */
-[data-theme="light"],
-.st-emotion-cache-fg4pbf,
-@media (prefers-color-scheme: light) {
-    :root {
-        --bg-primary:        #f8fafc;
-        --bg-secondary:      #f1f5f9;
-        --bg-card:           rgba(255, 255, 255, 0.95);
-        --bg-card-alt:       rgba(248, 250, 252, 0.95);
-        --bg-input:          rgba(255, 255, 255, 0.9);
-        --bg-hover:          rgba(139, 92, 246, 0.06);
+/* ── Base Reset ── */
+* { box-sizing: border-box; }
 
-        --text-primary:      #1e293b;
-        --text-secondary:    #334155;
-        --text-muted:        #64748b;
-        --text-faint:        #94a3b8;
-
-        --border-primary:    rgba(139, 92, 246, 0.25);
-        --border-hover:      rgba(139, 92, 246, 0.5);
-        --border-subtle:     rgba(139, 92, 246, 0.12);
-
-        --shadow-card:       0 4px 24px rgba(0, 0, 0, 0.08);
-        --shadow-hover:      0 8px 32px rgba(139, 92, 246, 0.15);
-        --shadow-green:      0 4px 16px rgba(16, 185, 129, 0.15);
-
-        --nav-bg:            rgba(255, 255, 255, 0.98);
-        --nav-border:        rgba(139, 92, 246, 0.15);
-        --nav-item-hover:    rgba(139, 92, 246, 0.08);
-        --nav-item-text:     #64748b;
-
-        --page-gradient:     linear-gradient(135deg, #f0f4ff 0%, #faf5ff 50%, #f0f9ff 100%);
-        --hr-gradient:       linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.2), transparent);
-        --divider-color:     rgba(139, 92, 246, 0.12);
-
-        --chart-grid:        rgba(100, 116, 139, 0.15);
-        --chart-bg:          rgba(248, 250, 252, 0.6);
-        --chart-paper:       rgba(0,0,0,0);
-    }
+.main, [data-testid="stAppViewContainer"] {
+    font-family: 'Inter', sans-serif !important;
+    background: var(--bg-primary) !important;
+    color: var(--text-primary);
 }
 
-/* Streamlit light mode detection */
-[data-testid="stAppViewContainer"][class*="light"] {
-    --bg-card:     rgba(255, 255, 255, 0.95);
-    --text-primary: #1e293b;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   GLOBAL RESET & BASE
-   ═══════════════════════════════════════════════════════════ */
-*, *::before, *::after {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
-
-html, body, .main, [data-testid="stAppViewContainer"] {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em !important;
+    line-height: 1.3 !important;
+    margin-bottom: 1rem !important;
     color: var(--text-primary) !important;
-    line-height: 1.7;
+}
+
+h2 { font-size: 1.5rem !important; }
+h3 { font-size: 1.15rem !important; font-weight: 600 !important; }
+
+p, span, div, label {
+    font-family: 'Inter', sans-serif !important;
+    line-height: 1.6;
 }
 
 code, pre, .mono {
-    font-family: 'JetBrains Mono', 'Courier New', monospace !important;
-    background: rgba(139, 92, 246, 0.1);
-    padding: 2px 6px;
-    border-radius: 4px;
-    color: var(--accent-purple);
+    font-family: 'JetBrains Mono', monospace !important;
+    background: var(--bg-secondary) !important;
+    padding: 0.2rem 0.4rem !important;
+    border-radius: 4px !important;
+    font-size: 0.85em !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   BACKGROUNDS — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
-.main, [data-testid="stAppViewContainer"] {
-    background: var(--page-gradient) !important;
-    background-attachment: fixed !important;
-}
-
+/* ── Header & Sidebar ── */
 [data-testid="stHeader"] {
-    background: var(--nav-bg) !important;
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--nav-border);
+    background: transparent !important;
 }
 
 [data-testid="stSidebar"] {
-    background: var(--nav-bg) !important;
-    border-right: 2px solid var(--nav-border) !important;
+    background: var(--bg-sidebar) !important;
+    border-right: 1px solid var(--border-color) !important;
+    padding: 1.5rem 1rem !important;
 }
 
-[data-testid="stSidebar"] > div:first-child {
-    padding-top: 1rem;
+/* ── Tabs ── */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    padding: 0;
+    background: var(--bg-secondary) !important;
+    border-radius: 12px !important;
+    padding: 6px !important;
+    gap: 4px !important;
+    border: 1px solid var(--border-color) !important;
+    margin-bottom: 1.5rem !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   VERTICAL NAV — Main Navigation Panel
-   ═══════════════════════════════════════════════════════════ */
-.vnav-container {
-    background: var(--nav-bg);
-    border: 2px solid var(--nav-border);
-    border-radius: 20px;
-    padding: 1.25rem 0.75rem;
-    position: sticky;
-    top: 1rem;
-    box-shadow: var(--shadow-card);
-    backdrop-filter: blur(12px);
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    background: transparent !important;
+    border-radius: 8px !important;
+    padding: 10px 20px !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    color: var(--text-secondary) !important;
+    border: none !important;
+    transition: all 0.2s ease !important;
 }
 
-.vnav-logo {
-    text-align: center;
-    padding: 0.75rem 0.5rem 1.25rem 0.5rem;
-    border-bottom: 2px solid var(--divider-color);
-    margin-bottom: 1rem;
-}
-
-.vnav-logo-title {
-    font-size: 1.1rem;
-    font-weight: 800;
-    color: var(--accent-purple);
-    letter-spacing: -0.3px;
-    margin-top: 6px;
-}
-
-.vnav-logo-sub {
-    font-size: 0.65rem;
-    color: var(--text-faint);
-    font-weight: 500;
-    margin-top: 3px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-}
-
-.vnav-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0.8rem 1rem;
-    border-radius: 12px;
-    margin-bottom: 4px;
-    cursor: pointer;
-    transition: all 0.25s ease;
-    border: 2px solid transparent;
-    text-decoration: none;
-    color: var(--nav-item-text) !important;
-    font-weight: 600;
-    font-size: 0.88rem;
-    position: relative;
-    overflow: hidden;
-}
-
-.vnav-item:hover {
-    background: var(--nav-item-hover);
-    border-color: var(--border-primary);
+[data-testid="stTabs"] [data-baseweb="tab"]:hover {
+    background: var(--bg-card-hover) !important;
     color: var(--text-primary) !important;
-    transform: translateX(3px);
 }
 
-.vnav-item.active {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: #ffffff !important;
-    border-color: transparent;
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+[data-testid="stTabs"] [aria-selected="true"] {
+    background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan)) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 10px !important;
 }
 
-.vnav-item.active .vnav-icon {
-    filter: brightness(1.2);
+/* ── Buttons ── */
+.stButton > button {
+    background: linear-gradient(135deg, var(--accent-green), #059669) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 0.6rem 1.2rem !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.2) !important;
 }
 
-.vnav-icon {
-    font-size: 1.1rem;
-    flex-shrink: 0;
-    width: 22px;
-    text-align: center;
+.stButton > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3) !important;
 }
 
-.vnav-label {
-    flex: 1;
-    line-height: 1.3;
+.stButton > button:active {
+    transform: translateY(0) !important;
 }
 
-.vnav-badge {
-    background: rgba(16, 185, 129, 0.2);
-    color: var(--accent-green);
-    font-size: 0.65rem;
-    font-weight: 700;
-    padding: 2px 7px;
-    border-radius: 50px;
-    border: 1px solid rgba(16, 185, 129, 0.3);
+/* ── Inputs ── */
+.stTextInput > div > div > input,
+.stNumberInput > div > div > input,
+.stSelectbox > div > div > div,
+.stSlider > div {
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 10px !important;
+    color: var(--text-primary) !important;
+    padding: 0.6rem 0.8rem !important;
 }
 
-.vnav-section-label {
-    font-size: 0.65rem;
-    font-weight: 700;
-    color: var(--text-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    padding: 0.75rem 1rem 0.4rem 1rem;
-    margin-top: 0.25rem;
+.stTextInput > div > div > input:focus,
+.stNumberInput > div > div > input:focus {
+    border-color: var(--accent-green) !important;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1) !important;
 }
 
-.vnav-divider {
-    height: 2px;
-    background: var(--divider-color);
-    margin: 0.75rem 0.5rem;
-    border-radius: 2px;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   HERO BANNER
-   ═══════════════════════════════════════════════════════════ */
+/* ── Hero Banner ── */
 .hero {
-    background: var(--hero-gradient);
-    padding: 2.5rem 2.5rem;
-    border-radius: 24px;
-    margin-bottom: 2rem;
-    border: 2px solid rgba(139, 92, 246, 0.3);
+    background: linear-gradient(135deg, #0f172a, #1e293b 55%, #111827);
+    padding: 2.5rem 2.5rem !important;
+    border-radius: 20px !important;
+    margin-bottom: 2rem !important;
+    border: 1px solid var(--border-color) !important;
     position: relative;
     overflow: hidden;
-    box-shadow: 0 20px 60px rgba(102, 126, 234, 0.25);
+    box-shadow: var(--shadow-glow);
 }
 
 .hero::before {
@@ -753,34 +666,41 @@ code, pre, .mono {
     right: -10%;
     width: 500px;
     height: 500px;
-    background: radial-gradient(circle, rgba(255,255,255,0.12), transparent 70%);
+    background: radial-gradient(circle, var(--accent-green-glow), transparent 70%);
     border-radius: 50%;
     pointer-events: none;
+    animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-20px) scale(1.05); }
 }
 
 .hero h1 {
-    color: #ffffff !important;
-    margin: 0 0 0.75rem 0;
-    font-size: 2.6rem;
-    font-weight: 800;
-    letter-spacing: -1px;
-    text-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    background: linear-gradient(135deg, #10b981, #3b82f6, #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-size: 2.8rem !important;
+    font-weight: 800 !important;
+    margin: 0 0 0.75rem 0 !important;
     position: relative;
     z-index: 1;
 }
 
 .hero p {
-    color: rgba(255, 255, 255, 0.92) !important;
-    margin: 0 0 1.25rem 0;
-    font-size: 1.05rem;
-    max-width: 700px;
-    line-height: 1.8;
+    color: var(--text-secondary) !important;
+    margin: 0 !important;
+    font-size: 1.1rem !important;
+    line-height: 1.6 !important;
+    max-width: 600px;
     position: relative;
     z-index: 1;
 }
 
 .hero-pills {
-    margin-top: 1.25rem;
+    margin-top: 1.25rem !important;
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
@@ -789,152 +709,188 @@ code, pre, .mono {
     z-index: 1;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   PILLS
-   ═══════════════════════════════════════════════════════════ */
 .pill {
-    padding: 7px 16px;
-    border-radius: 50px;
-    font-size: 0.82rem;
-    font-weight: 600;
+    padding: 6px 14px !important;
+    border-radius: 999px !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    transition: all 0.3s ease;
-    cursor: default;
+    gap: 6px;
+    backdrop-filter: blur(10px);
 }
 
-.pill:hover { transform: translateY(-2px); }
-
 .pill-green {
-    background: rgba(16, 185, 129, 0.25);
-    color: #10b981;
-    border: 2px solid rgba(16, 185, 129, 0.5);
+    background: var(--accent-green-soft) !important;
+    color: var(--accent-green) !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
 }
 
 .pill-blue {
-    background: rgba(59, 130, 246, 0.25);
-    color: #3b82f6;
-    border: 2px solid rgba(59, 130, 246, 0.5);
+    background: var(--accent-blue-soft) !important;
+    color: var(--accent-blue) !important;
+    border: 1px solid rgba(59, 130, 246, 0.3) !important;
 }
 
 .pill-amber {
-    background: rgba(245, 158, 11, 0.25);
-    color: #f59e0b;
-    border: 2px solid rgba(245, 158, 11, 0.5);
+    background: var(--accent-amber-soft) !important;
+    color: var(--accent-amber) !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
+.pill-purple {
+    background: rgba(139, 92, 246, 0.15) !important;
+    color: var(--accent-purple) !important;
+    border: 1px solid rgba(139, 92, 246, 0.3) !important;
 }
 
 .pill-muted {
-    color: rgba(255, 255, 255, 0.75);
-    font-size: 0.88rem;
-    font-weight: 500;
+    color: var(--text-muted) !important;
+    font-size: 0.85rem !important;
+    padding: 6px 0 !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SECTION HEADINGS — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
-.section-title {
-    font-size: 1.7rem;
-    font-weight: 700;
+/* ── Section Headings ── */
+.section-heading {
+    font-size: 1.4rem !important;
+    font-weight: 700 !important;
     color: var(--text-primary) !important;
-    margin: 2rem 0 1.25rem 0;
-    padding-bottom: 0.6rem;
-    border-bottom: 3px solid var(--border-primary);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.section-subtitle {
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: var(--text-secondary) !important;
-    margin: 1.75rem 0 0.9rem 0;
+    margin: 2rem 0 1.25rem 0 !important;
+    padding-bottom: 0.5rem !important;
+    border-bottom: 2px solid var(--border-color) !important;
     display: flex;
     align-items: center;
     gap: 10px;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   KPI CARDS — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
+.section-heading::before {
+    content: '';
+    width: 4px;
+    height: 24px;
+    background: linear-gradient(180deg, var(--accent-green), var(--accent-cyan));
+    border-radius: 2px;
+}
+
+.sub-heading {
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    color: var(--text-secondary) !important;
+    margin: 1.5rem 0 0.75rem 0 !important;
+}
+
+/* ── KPI Grid ── */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
 .kpi {
-    background: var(--bg-card);
-    padding: 1.4rem 1.2rem;
-    border-radius: 16px;
+    background: var(--bg-card) !important;
+    padding: 1.5rem 1.25rem !important;
+    border-radius: 16px !important;
     text-align: center;
-    border-left: 4px solid;
-    min-height: 135px;
+    border: 1px solid var(--border-color) !important;
+    min-height: 130px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 7px;
     transition: all 0.3s ease;
-    backdrop-filter: blur(10px);
-    box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+}
+
+.kpi::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+    opacity: 0.7;
 }
 
 .kpi:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-hover);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-card);
+    border-color: var(--accent-green) !important;
 }
 
 .kpi-lbl {
-    color: var(--text-muted);
-    font-size: 0.72rem;
+    color: var(--text-muted) !important;
+    font-size: 0.7rem !important;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    font-weight: 700;
-    margin-bottom: 5px;
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
 }
 
 .kpi-val {
-    color: var(--text-primary);
-    font-weight: 800;
-    font-size: 1.65rem;
-    line-height: 1.2;
-    letter-spacing: -0.5px;
+    color: var(--text-primary) !important;
+    font-weight: 800 !important;
+    font-size: 1.5rem !important;
+    line-height: 1.2 !important;
+    margin-bottom: 4px !important;
 }
 
 .kpi-sub {
-    color: var(--text-faint);
-    font-size: 0.72rem;
-    margin-top: 5px;
-    line-height: 1.4;
+    color: var(--text-muted) !important;
+    font-size: 0.75rem !important;
+    margin-top: 4px !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   RECOMMENDATION CARDS — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
-.rec {
-    background: var(--bg-card);
-    padding: 1.6rem 1.4rem;
-    border-radius: 16px;
-    margin-bottom: 1rem;
+/* ── Recommendation Cards ── */
+.rec-card {
+    background: var(--bg-card) !important;
+    padding: 1.5rem !important;
+    border-radius: 16px !important;
+    margin-bottom: 1rem !important;
+    border: 1px solid var(--border-color) !important;
     transition: all 0.3s ease;
-    border: 2px solid var(--border-primary);
+    position: relative;
+    overflow: hidden;
+}
+
+.rec-card:hover {
+    transform: translateY(-3px);
     box-shadow: var(--shadow-card);
+    border-color: var(--accent-green) !important;
 }
 
-.rec:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-hover);
-    border-color: var(--border-hover);
+.rec-card.best {
+    border: 2px solid var(--accent-green) !important;
+    background: linear-gradient(135deg, var(--bg-card), rgba(16, 185, 129, 0.05)) !important;
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.15);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   LIVE TICKER — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
+.rec-card.best::after {
+    content: 'BEST CHOICE';
+    position: absolute;
+    top: 12px;
+    right: -35px;
+    background: var(--accent-green);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 4px 40px;
+    transform: rotate(45deg);
+    letter-spacing: 0.05em;
+}
+
+/* ── Ticker ── */
 .ticker {
-    background: var(--bg-card);
-    border: 2px solid var(--border-primary);
-    border-radius: 16px;
-    padding: 0.9rem 1.4rem;
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 14px !important;
+    padding: 1rem 1.5rem !important;
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 16px;
     flex-wrap: wrap;
-    margin-bottom: 1.75rem;
+    margin-bottom: 1.5rem !important;
     box-shadow: var(--shadow-card);
 }
 
@@ -942,246 +898,326 @@ code, pre, .mono {
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #10b981;
+    background: var(--accent-green);
     flex-shrink: 0;
-    animation: pulse-dot 1.5s ease-in-out infinite;
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+    animation: pulse-dot 2s ease-in-out infinite;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
 }
 
 @keyframes pulse-dot {
     0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(1.5); }
+    50% { opacity: 0.4; transform: scale(1.5); }
 }
 
-/* ═══════════════════════════════════════════════════════════
-   ALERT BANNERS — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
+/* ── Alert Banners ── */
 .alert {
-    padding: 1rem 1.5rem;
-    border-radius: 12px;
-    margin-bottom: 1.5rem;
-    border-left: 5px solid;
-    line-height: 1.6;
-    font-size: 0.95rem;
+    padding: 1rem 1.25rem !important;
+    border-radius: 12px !important;
+    margin-bottom: 1rem !important;
+    border: 1px solid !important;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.95rem !important;
+    line-height: 1.5 !important;
 }
 
 .alert-g {
-    background: rgba(16, 185, 129, 0.12);
-    border-color: #10b981;
-    color: var(--text-primary);
+    background: rgba(16, 185, 129, 0.08) !important;
+    border-color: rgba(16, 185, 129, 0.4) !important;
+    border-left: 4px solid var(--accent-green) !important;
 }
 
 .alert-r {
-    background: rgba(239, 68, 68, 0.12);
-    border-color: #ef4444;
-    color: var(--text-primary);
+    background: rgba(239, 68, 68, 0.08) !important;
+    border-color: rgba(239, 68, 68, 0.4) !important;
+    border-left: 4px solid var(--accent-red) !important;
 }
 
 .alert-y {
-    background: rgba(245, 158, 11, 0.12);
-    border-color: #f59e0b;
-    color: var(--text-primary);
+    background: rgba(245, 158, 11, 0.08) !important;
+    border-color: rgba(245, 158, 11, 0.4) !important;
+    border-left: 4px solid var(--accent-amber) !important;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   PROGRESS BAR
-   ═══════════════════════════════════════════════════════════ */
+/* ── Progress Bar ── */
 .pb {
     height: 8px;
-    border-radius: 50px;
-    background: var(--bg-secondary);
+    border-radius: 999px;
+    background: var(--bg-primary);
     margin: 10px 0;
     overflow: hidden;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border-color);
 }
 
 .pb-fill {
     height: 100%;
-    border-radius: 50px;
-    background: linear-gradient(90deg, #10b981, #3b82f6);
-    transition: width 0.6s ease;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan));
+    transition: width 0.5s ease;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   BADGE CARDS — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
+/* ── Badge Cards ── */
+.badge-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
 .badge-card {
-    background: var(--bg-card);
-    border-radius: 16px;
-    padding: 1.4rem 1rem;
+    background: var(--bg-card) !important;
+    border-radius: 16px !important;
+    padding: 1.5rem 1rem !important;
     text-align: center;
-    border: 2px solid var(--border-subtle);
+    border: 1px solid var(--border-color) !important;
     transition: all 0.3s ease;
-    min-height: 175px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 7px;
-    box-shadow: var(--shadow-card);
 }
 
 .badge-card.earned {
-    border-color: rgba(16, 185, 129, 0.5);
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, var(--bg-card) 100%);
-    box-shadow: 0 8px 32px rgba(16, 185, 129, 0.15);
+    border-color: var(--accent-green) !important;
+    background: linear-gradient(135deg, var(--bg-card), rgba(16, 185, 129, 0.08)) !important;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
 }
 
 .badge-card:hover {
-    transform: scale(1.04);
-    box-shadow: var(--shadow-hover);
+    transform: scale(1.05);
+    box-shadow: var(--shadow-card);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   LIVE TIME DISPLAY — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
-.live-time {
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%);
-    border: 2px solid rgba(16, 185, 129, 0.35);
-    padding: 0.9rem 1.25rem;
-    border-radius: 14px;
+.badge-icon {
+    font-size: 2.5rem !important;
+    margin-bottom: 0.5rem !important;
+    display: block;
+}
+
+.badge-name {
+    font-weight: 700 !important;
+    font-size: 0.85rem !important;
+    margin-bottom: 4px !important;
+}
+
+.badge-desc {
+    font-size: 0.7rem !important;
+    color: var(--text-muted) !important;
+    margin-bottom: 8px !important;
+    line-height: 1.4 !important;
+}
+
+.badge-status {
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
+    padding: 3px 10px;
+    border-radius: 999px;
+    display: inline-block;
+}
+
+.badge-status.earned {
+    background: var(--accent-green-soft);
     color: var(--accent-green);
-    font-weight: 700;
+}
+
+.badge-status.locked {
+    background: var(--bg-primary);
+    color: var(--text-muted);
+}
+
+/* ── Live Clock ── */
+.live-time {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.1)) !important;
+    border: 1px solid rgba(16, 185, 129, 0.25) !important;
+    padding: 1rem !important;
+    border-radius: 14px !important;
+    color: var(--accent-green) !important;
+    font-weight: 700 !important;
     text-align: center;
-    font-size: 1.25rem;
+    font-size: 1.2rem !important;
     letter-spacing: 0.05em;
     font-family: 'JetBrains Mono', monospace !important;
-    box-shadow: var(--shadow-green);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+    margin: 1rem 0 !important;
 }
 
 .tz-sub {
-    color: var(--text-faint);
-    font-size: 0.72rem;
+    color: var(--text-muted) !important;
+    font-size: 0.75rem !important;
     text-align: center;
-    margin-top: 7px;
-    font-weight: 500;
+    margin-top: 6px !important;
+    letter-spacing: 0.02em;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   GENERIC CARD — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
-.card {
-    background: var(--bg-card);
-    border: 2px solid var(--border-primary);
-    border-radius: 14px;
-    padding: 1.25rem 1.5rem;
+/* ── Info Cards ── */
+.info-card {
+    background: var(--bg-card) !important;
+    border-radius: 16px !important;
+    padding: 1.5rem !important;
+    border: 1px solid var(--border-color) !important;
+    margin-bottom: 1rem !important;
+}
+
+.info-card h4 {
+    margin-top: 0 !important;
+    margin-bottom: 1rem !important;
+    color: var(--text-primary) !important;
+}
+
+/* ── Impact Cards ── */
+.impact-card {
+    background: linear-gradient(135deg, var(--bg-card), rgba(16, 185, 129, 0.05)) !important;
+    border-radius: 16px !important;
+    padding: 2rem 1.5rem !important;
+    text-align: center;
+    border: 1px solid var(--border-color) !important;
+    transition: all 0.3s ease;
+}
+
+.impact-card:hover {
+    transform: translateY(-3px);
     box-shadow: var(--shadow-card);
-    transition: all 0.3s ease;
+    border-color: var(--accent-green) !important;
 }
 
-.card:hover {
-    box-shadow: var(--shadow-hover);
-    border-color: var(--border-hover);
+.impact-icon {
+    font-size: 3rem !important;
+    margin-bottom: 0.75rem !important;
+    display: block;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   DIVIDERS — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
-hr {
-    border: 0 !important;
-    height: 2px !important;
-    background: var(--hr-gradient) !important;
-    margin: 2.5rem 0 !important;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   STREAMLIT OVERRIDES — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
-.stButton > button {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white !important;
-    border: none;
-    border-radius: 10px;
-    padding: 0.6rem 1.5rem;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.stButton > button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5);
-}
-
-.stSelectbox > div > div,
-.stTextInput > div > div > input,
-.stNumberInput > div > div > input {
-    background: var(--bg-input) !important;
-    border: 2px solid var(--border-primary) !important;
-    border-radius: 10px !important;
-    color: var(--text-primary) !important;
-}
-
-.stSelectbox > div > div:focus-within,
-.stTextInput > div > div:focus-within,
-.stNumberInput > div > div:focus-within {
-    border-color: var(--border-hover) !important;
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1) !important;
-}
-
-/* Metric cards */
-[data-testid="stMetricValue"] {
-    font-size: 1.7rem !important;
+.impact-value {
+    font-size: 1.8rem !important;
     font-weight: 800 !important;
+    margin-bottom: 0.25rem !important;
+}
+
+.impact-label {
+    font-size: 0.8rem !important;
+    color: var(--text-secondary) !important;
+}
+
+/* ── Tip Cards ── */
+.tip-card {
+    background: var(--bg-card) !important;
+    border-left: 4px solid var(--accent-green) !important;
+    border-radius: 0 12px 12px 0 !important;
+    padding: 1rem 1.25rem !important;
+    margin-bottom: 0.75rem !important;
+    color: var(--text-secondary) !important;
+    font-size: 0.9rem !important;
+    line-height: 1.6 !important;
+    transition: all 0.2s ease;
+}
+
+.tip-card:hover {
+    background: var(--bg-card-hover) !important;
+    padding-left: 1.5rem !important;
+}
+
+/* ── Divider ── */
+hr {
+    border: none !important;
+    height: 1px !important;
+    background: linear-gradient(90deg, transparent, var(--border-color), transparent) !important;
+    margin: 2rem 0 !important;
+}
+
+/* ── Sidebar Styling ── */
+.sidebar-section {
+    margin-bottom: 1.5rem !important;
+    padding-bottom: 1rem !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+.sidebar-section:last-child {
+    border-bottom: none !important;
+}
+
+.sidebar-title {
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
     color: var(--text-primary) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem !important;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── Data Table Styling ── */
+.stDataFrame td, .stDataFrame th {
+    padding: 12px 16px !important;
+    font-size: 0.9rem !important;
+}
+
+.stDataFrame th {
+    background: var(--bg-secondary) !important;
+    font-weight: 600 !important;
+    color: var(--text-primary) !important;
+    border-bottom: 2px solid var(--border-color) !important;
+}
+
+.stDataFrame td {
+    border-bottom: 1px solid var(--border-light) !important;
+    color: var(--text-secondary) !important;
+}
+
+.stDataFrame tr:hover td {
+    background: var(--bg-card-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+/* ── Metric Styling ── */
+[data-testid="stMetricValue"] {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
 }
 
 [data-testid="stMetricLabel"] {
-    font-size: 0.88rem !important;
-    font-weight: 600 !important;
+    font-size: 0.8rem !important;
     color: var(--text-muted) !important;
 }
 
-/* DataFrames */
-.stDataFrame {
-    border-radius: 12px;
-    overflow: hidden;
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SPACING UTILITIES
-   ═══════════════════════════════════════════════════════════ */
-.space-sm  { margin-bottom: 1rem; }
-.space-md  { margin-bottom: 1.5rem; }
-.space-lg  { margin-bottom: 2.5rem; }
-.space-xl  { margin-bottom: 3.5rem; }
-
-/* ═══════════════════════════════════════════════════════════
-   CONTENT AREA — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
-.content-area {
-    color: var(--text-primary) !important;
+::-webkit-scrollbar-track {
+    background: var(--bg-primary);
 }
 
-.content-area p,
-.content-area span,
-.content-area div {
-    color: inherit;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   SCROLLBAR — ADAPTIVE
-   ═══════════════════════════════════════════════════════════ */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-secondary); }
 ::-webkit-scrollbar-thumb {
-    background: var(--accent-purple);
-    border-radius: 3px;
-    opacity: 0.6;
+    background: var(--border-color);
+    border-radius: 4px;
 }
-::-webkit-scrollbar-thumb:hover { opacity: 1; }
 
-/* ═══════════════════════════════════════════════════════════
-   RESPONSIVE
-   ═══════════════════════════════════════════════════════════ */
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* ── Animations ── */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.stTabs [data-baseweb="tab-panel"] {
+    animation: fadeIn 0.3s ease;
+}
+
+/* ── Responsive ── */
 @media (max-width: 768px) {
-    .hero h1 { font-size: 1.9rem; }
-    .hero p  { font-size: 0.95rem; }
-    .kpi-val { font-size: 1.35rem; }
-    .section-title { font-size: 1.3rem; }
-    .vnav-container { position: static; }
+    .hero { padding: 1.5rem !important; }
+    .hero h1 { font-size: 2rem !important; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .badge-grid { grid-template-columns: repeat(2, 1fr); }
+    .ticker { padding: 0.75rem 1rem !important; }
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ──────────────────────────────────────────────────────────────
 # 6. Session state
@@ -1208,12 +1244,12 @@ _SS_DEFAULTS = {
     "sel_window":       0,
     "upload_hash":      "",
     "upload_df_json":   "",
-    "active_page":      "dashboard",   # vertical nav state
 }
 
 for _k, _v in _SS_DEFAULTS.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
+
 
 # ──────────────────────────────────────────────────────────────
 # 7. Auto-refresh
@@ -1226,52 +1262,14 @@ if st.session_state.live_mode:
         height=0,
     )
 
+
 # ──────────────────────────────────────────────────────────────
-# 8. SIDEBAR — Configuration + Vertical Nav
+# 8. SIDEBAR
 # ──────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    # ── Vertical Navigation ──────────────────────────────────
-    st.markdown("""
-<div class="vnav-logo">
-  <div style="font-size:2rem;">🌍</div>
-  <div class="vnav-logo-title">CarbonWise</div>
-  <div class="vnav-logo-sub">Grid Carbon Scheduler</div>
-</div>
-""", unsafe_allow_html=True)
-
-    NAV_ITEMS = [
-        ("dashboard",   "📈", "Dashboard",       "Live grid overview"),
-        ("advisor",     "🎯", "Smart Advisor",    "Best run windows"),
-        ("forecast",    "🌤️", "Weekly Forecast",  "7-day outlook"),
-        ("analytics",   "📊", "Analytics",        "Comparison & budget"),
-        ("achievements","🏅", "Achievements",     "Badges & milestones"),
-        ("logger",      "📝", "Logger",           "Log a run"),
-        ("explorer",    "🔍", "Data Explorer",    "Raw data & config"),
-    ]
-
-    st.markdown('<div class="vnav-section-label">Navigation</div>', unsafe_allow_html=True)
-
-    for _page_id, _icon, _label, _sublabel in NAV_ITEMS:
-        _is_active = st.session_state.active_page == _page_id
-        _active_cls = "active" if _is_active else ""
-        _btn_key = f"nav_{_page_id}"
-
-        # Use Streamlit button styled as nav item
-        if st.button(
-            f"{_icon}  {_label}",
-            key=_btn_key,
-            use_container_width=True,
-            type="primary" if _is_active else "secondary",
-        ):
-            st.session_state.active_page = _page_id
-            st.rerun()
-
-    st.markdown('<div class="vnav-divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="vnav-section-label">Configuration</div>', unsafe_allow_html=True)
-
-    # Live Mode
-    st.markdown('<p style="font-size:1rem;font-weight:700;color:var(--text-secondary);margin:1rem 0 0.6rem 0;">🔄 Live Mode</p>', unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-title'>🔄 Live Mode</div>", unsafe_allow_html=True)
     st.session_state.live_mode = st.toggle(
         "Auto-refresh", value=st.session_state.live_mode, key="_live"
     )
@@ -1284,17 +1282,16 @@ with st.sidebar:
             format_func=lambda x: _ri_map[x],
         )
         st.markdown(
-            f'<div style="background:rgba(16,185,129,0.12);border:2px solid rgba(16,185,129,0.35);'
-            f'border-radius:10px;padding:9px 13px;margin-top:7px;">'
-            f'<span style="color:#10b981;font-size:0.82rem;font-weight:700;">'
-            f'🟢 Live — refreshing every {_ri_map[st.session_state.refresh_s]}</span></div>',
+            f"<div style='background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.1)); "
+            f"border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 10px; padding: 10px 14px; margin-top: 8px;'>"
+            f"<span style='color: #10b981; font-size: 0.8rem; font-weight: 600;'>"
+            f"🟢 Live — every {_ri_map[st.session_state.refresh_s]}</span></div>",
             unsafe_allow_html=True,
         )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div style='margin:1.5rem 0;height:2px;background:var(--divider-color);'></div>", unsafe_allow_html=True)
-
-    # Location
-    st.markdown('<p style="font-size:1rem;font-weight:700;color:var(--text-secondary);margin-bottom:0.6rem;">📍 Location</p>', unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-title'>📍 Location</div>", unsafe_allow_html=True)
     _LOC_MODES = ["Auto-Detect", "GPS (Browser)", "Manual Select", "Custom Coordinates"]
     st.session_state.loc_mode = st.radio(
         "Mode", _LOC_MODES,
@@ -1316,25 +1313,25 @@ with st.sidebar:
             else:
                 st.error("Detection failed — try Manual Select.")
         st.markdown(
-            f'<div style="background:var(--bg-card);padding:11px 13px;border-radius:10px;margin-top:9px;'
-            f'border:2px solid var(--border-primary);">'
-            f'<div style="color:var(--text-muted);font-size:0.68rem;margin-bottom:5px;">COORDINATES</div>'
-            f'<div style="color:#10b981;font-size:0.92rem;font-weight:700;">'
-            f'{st.session_state.lat:.4f}, {st.session_state.lon:.4f}</div></div>',
+            f"<div style='background: var(--bg-secondary); padding: 12px 14px; border-radius: 10px; margin-top: 8px; border: 1px solid var(--border-color);'>"
+            f"<div style='color: var(--text-muted); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;'>Coordinates</div>"
+            f"<div style='color: #10b981; font-size: 0.9rem; font-weight: 600;'>"
+            f"{st.session_state.lat:.4f}, {st.session_state.lon:.4f}</div></div>",
             unsafe_allow_html=True,
         )
 
     elif st.session_state.loc_mode == "GPS (Browser)":
         components.html("""
 <style>
-html,body{margin:0;padding:0;background:transparent;font-family:'Inter',sans-serif;}
-#btn{width:100%;padding:11px;background:linear-gradient(135deg,#667eea,#764ba2);
-     color:white;border:none;border-radius:10px;cursor:pointer;font-weight:700;font-size:13px;}
-#btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(102,126,234,0.4);}
-#btn:disabled{opacity:0.6;cursor:not-allowed;}
-#msg{color:#94a3b8;font-size:12px;margin-top:7px;text-align:center;min-height:16px;}
-.c{background:rgba(16,185,129,0.12);padding:9px;border-radius:8px;margin-top:7px;
-   color:#10b981;font-size:13px;font-weight:600;display:none;text-align:center;}
+html,body{margin:0;padding:10px;background:transparent;font-family:'Inter',sans-serif;}
+#btn{width:100%;padding:10px;background:linear-gradient(135deg,#1e3a5f,#0f172a);
+     color:#10b981;border:1.5px solid rgba(16,185,129,.45);border-radius:10px;
+     cursor:pointer;font-weight:600;font-size:13px;transition:all .2s;}
+#btn:hover{background:rgba(16,185,129,.12);transform:translateY(-1px);}
+#btn:disabled{opacity:.6;}
+#msg{color:#64748b;font-size:11px;margin-top:5px;text-align:center;min-height:16px;}
+.c{background:#1f2937;padding:10px;border-radius:8px;margin-top:8px;
+   color:#10b981;font-size:12px;font-weight:600;display:none;border:1px solid rgba(16,185,129,.2);}
 </style>
 <button id="btn" onclick="go()">📡 Use GPS</button>
 <div id="msg"></div><div id="c" class="c"></div>
@@ -1342,17 +1339,16 @@ html,body{margin:0;padding:0;background:transparent;font-family:'Inter',sans-ser
 function go(){
   var btn=document.getElementById('btn'),msg=document.getElementById('msg'),c=document.getElementById('c');
   if(!navigator.geolocation){msg.innerHTML='<span style="color:#ef4444">Not supported</span>';return;}
-  btn.textContent='⏳ Locating…';btn.disabled=true;msg.textContent='Waiting for permission…';
+  btn.textContent='⏳ Locating…';btn.disabled=true;msg.textContent='Waiting…';
   navigator.geolocation.getCurrentPosition(
     p=>{btn.textContent='✅ Done';c.style.display='block';
-        c.innerHTML='📍 '+p.coords.latitude.toFixed(5)+', '+p.coords.longitude.toFixed(5);
-        msg.textContent='';btn.disabled=false;},
+        c.innerHTML='📍 '+p.coords.latitude.toFixed(5)+', '+p.coords.longitude.toFixed(5);},
     e=>{btn.textContent='📡 Use GPS';btn.disabled=false;
-        msg.innerHTML='<span style="color:#ef4444">'+(e.code===1?'Permission denied':'Error occurred')+'</span>';},
-    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
+        msg.innerHTML='<span style="color:#ef4444">'+(e.code===1?'Permission denied':'Error')+'</span>';},
+    {enableHighAccuracy:true,timeout:12000,maximumAge:0}
   );
 }
-</script>""", height=115)
+</script>""", height=120)
         _ga, _gb = st.columns(2)
         with _ga: _glat = st.number_input("Lat",  -90.0,  90.0, st.session_state.lat, 0.0001, "%.5f")
         with _gb: _glon = st.number_input("Lon", -180.0, 180.0, st.session_state.lon, 0.0001, "%.5f")
@@ -1379,12 +1375,11 @@ function go(){
         st.session_state.lat, st.session_state.lon = _zd["lat"], _zd["lon"]
         st.session_state.tz = GRID_ZONES[_reg]["timezone"]
         st.markdown(
-            f'<div style="background:var(--bg-card);padding:11px 13px;border-radius:10px;margin-top:9px;'
-            f'border:2px solid var(--border-primary);">'
-            f'<div style="color:var(--text-muted);font-size:0.68rem;margin-bottom:5px;">ZONE AVG CI</div>'
-            f'<div style="color:#10b981;font-size:0.95rem;font-weight:700;margin-bottom:3px;">{_zd["ci_avg"]} gCO₂/kWh</div>'
-            f'<div style="color:var(--text-faint);font-size:0.72rem;">{GRID_ZONES[_reg]["voltage"]}</div>'
-            f'</div>',
+            f"<div style='background: var(--bg-secondary); padding: 12px 14px; border-radius: 10px; margin-top: 8px; border: 1px solid var(--border-color);'>"
+            f"<div style='color: var(--text-muted); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;'>Zone Avg CI</div>"
+            f"<div style='color: #10b981; font-size: 1rem; font-weight: 600;'>{_zd['ci_avg']} gCO₂/kWh</div>"
+            f"<div style='color: var(--text-muted); font-size: 0.7rem; margin-top: 4px;'>{GRID_ZONES[_reg]['voltage']}</div>"
+            f"</div>",
             unsafe_allow_html=True,
         )
 
@@ -1397,18 +1392,16 @@ function go(){
             "Timezone", _tz_list,
             index=_tz_list.index(st.session_state.tz) if st.session_state.tz in _tz_list else 0,
         )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div style='margin:1.5rem 0;height:2px;background:var(--divider-color);'></div>", unsafe_allow_html=True)
-
-    # Clock
-    st.markdown(f'<div class="live-time">🕐 {exact_time_str(st.session_state.tz)}</div>', unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
+    st.markdown(f"<div class='live-time'>🕐 {exact_time_str(st.session_state.tz)}</div>", unsafe_allow_html=True)
     _slot = slot_str(st.session_state.tz)
-    st.markdown(f'<div class="tz-sub">{st.session_state.tz} &nbsp;|&nbsp; Slot: {to_12h(_slot)}</div>', unsafe_allow_html=True)
+    st.markdown(f"<div class='tz-sub'>{st.session_state.tz} &nbsp;|&nbsp; slot {to_12h(_slot)}</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div style='margin:1.5rem 0;height:2px;background:var(--divider-color);'></div>", unsafe_allow_html=True)
-
-    # Data Source
-    st.markdown('<p style="font-size:1rem;font-weight:700;color:var(--text-secondary);margin-bottom:0.6rem;">📡 Data Source</p>', unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-title'>📡 Data Source</div>", unsafe_allow_html=True)
     _DS = ["Automatic (API)", "Sample Data", "Upload CSV"]
     st.session_state.data_source = st.radio(
         "Source", _DS,
@@ -1419,7 +1412,7 @@ function go(){
     _upload_file = None
 
     if st.session_state.data_source == "Automatic (API)":
-        st.caption("🌐 Electricity Maps API + real-time simulation")
+        st.caption("Electricity Maps API + real-time simulation.")
         st.session_state.api_token = st.text_input(
             "API Token (optional)", type="password",
             value=st.session_state.api_token, placeholder="Free-tier token"
@@ -1429,16 +1422,15 @@ function go(){
             st.rerun()
 
     elif st.session_state.data_source == "Upload CSV":
-        st.warning("⚠️ Expects: time, thermal_mw, hydro_mw, nuclear_mw, res_mw")
+        st.warning("Upload mode — expects columns: time, thermal_mw, hydro_mw, nuclear_mw, res_mw")
         _upload_file = st.file_uploader("CSV", type=["csv"], label_visibility="collapsed")
 
     else:
-        st.caption("📊 Built-in synthetic grid profile")
+        st.caption("Built-in synthetic grid profile.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div style='margin:1.5rem 0;height:2px;background:var(--divider-color);'></div>", unsafe_allow_html=True)
-
-    # Appliance
-    st.markdown('<p style="font-size:1rem;font-weight:700;color:var(--text-secondary);margin-bottom:0.6rem;">🔌 Appliance</p>', unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-title'>🔌 Appliance</div>", unsafe_allow_html=True)
     _prev = st.session_state.appliance
     st.session_state.appliance = st.selectbox(
         "Type", list(APPLIANCES.keys()),
@@ -1472,17 +1464,15 @@ function go(){
         st.session_state.duration = _ap["dur"]
         st.session_state.deadline = _ap["deadline"]
         st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div style='margin:1.5rem 0;height:2px;background:var(--divider-color);'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-title'>⚡ Optimisation</div>", unsafe_allow_html=True)
+    _top_k = st.slider("Top windows", 3, 12, 5)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # Optimisation
-    st.markdown('<p style="font-size:1rem;font-weight:700;color:var(--text-secondary);margin-bottom:0.6rem;">⚡ Optimisation</p>', unsafe_allow_html=True)
-    _top_k = st.slider("Top windows to show", 3, 12, 5)
-
-    st.markdown("<div style='margin:1.5rem 0;height:2px;background:var(--divider-color);'></div>", unsafe_allow_html=True)
-
-    # Alerts & Budget
-    st.markdown('<p style="font-size:1rem;font-weight:700;color:var(--text-secondary);margin-bottom:0.6rem;">🔔 Alerts & Budget</p>', unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='sidebar-title'>🔔 Alerts & Budget</div>", unsafe_allow_html=True)
     st.session_state.alert_enabled = st.toggle(
         "Enable CI alerts", value=st.session_state.alert_enabled
     )
@@ -1494,6 +1484,8 @@ function go(){
         "Daily CO₂ budget (kg)", 0.1, 10.0,
         float(st.session_state.daily_budget_kg), 0.1, "%.1f"
     )
+    st.markdown("</div>", unsafe_allow_html=True)
+
 
 # ──────────────────────────────────────────────────────────────
 # 9. Data loading
@@ -1510,7 +1502,7 @@ if st.session_state.data_source == "Automatic (API)":
         )
 elif st.session_state.data_source == "Sample Data":
     _raw = DataEngine.load_sample(_seed)
-else:
+else:  # Upload CSV
     if _upload_file is not None:
         _file_hash = hashlib.md5(_upload_file.getvalue()).hexdigest()
         if _file_hash != st.session_state.upload_hash:
@@ -1532,11 +1524,13 @@ if _raw is None or _raw.empty:
     st.error("❌ No grid data available.")
     st.stop()
 
+# Ensure CI column exists
 if "ci" not in _raw.columns:
     _raw["ci"] = _raw.apply(
         lambda r: compute_ci(r["thermal_mw"], r["hydro_mw"], r["nuclear_mw"], r["res_mw"]), axis=1
     )
 
+# Build derived datasets
 _full      = DataEngine.full_day(_raw)
 _now_slot  = slot_str(st.session_state.tz)
 _now_12    = to_12h(_now_slot)
@@ -1552,77 +1546,65 @@ _weekly    = DataEngine.weekly_forecast(float(_full["ci"].mean()))
 _log_df    = read_log()
 _stats     = compute_stats(_log_df)
 
+# Location label
 _loc_lbl = (
     st.session_state.zone  if st.session_state.loc_mode == "Manual Select"
     else "GPS"             if st.session_state.loc_mode == "GPS (Browser)"
     else f"{st.session_state.lat:.2f}°, {st.session_state.lon:.2f}°"
 )
 
-# ──────────────────────────────────────────────────────────────
-# 10. Plotly theme helper (adaptive)
-# ──────────────────────────────────────────────────────────────
-
-def plotly_layout(height=400, **kwargs):
-    """Return a consistent adaptive Plotly layout dict."""
-    base = dict(
-        plot_bgcolor="var(--chart-bg, rgba(15,12,41,0.4))",
-        paper_bgcolor="rgba(0,0,0,0)",
-        font={"color": "#e2e8f0", "family": "Inter"},
-        height=height,
-        margin={"l": 60, "r": 40, "t": 40, "b": 50},
-    )
-    base.update(kwargs)
-    return base
 
 # ──────────────────────────────────────────────────────────────
-# 11. HERO BANNER
+# 10. HERO BANNER
 # ──────────────────────────────────────────────────────────────
 
 _live_pill = (
     '<span class="pill pill-green"><span style="width:8px;height:8px;border-radius:50%;'
-    'background:#10b981;display:inline-block;animation:pulse-dot 1.5s infinite;'
-    'box-shadow:0 0 8px rgba(16,185,129,0.6);"></span> LIVE</span>'
+    'background:#10b981;display:inline-block;animation:pulse-dot 2s infinite;box-shadow:0 0 8px rgba(16,185,129,.5);"></span> LIVE</span>'
     if st.session_state.live_mode else ""
 )
 
 st.markdown(f"""
 <div class="hero">
   <h1>🌍 CarbonWise</h1>
-  <p>Real-time carbon intensity scheduler — intelligently run appliances during the cleanest
-     grid windows to automatically shrink your carbon footprint and save energy costs.</p>
+  <p>Real-time carbon intensity scheduler — run appliances during the cleanest
+     grid windows to shrink your CO₂ footprint automatically.</p>
   <div class="hero-pills">
     {_live_pill}
     <span class="pill pill-blue">⚡ Smart Scheduler</span>
-    <span class="pill pill-amber">🏅 Gamified Experience</span>
+    <span class="pill pill-amber">🏅 Gamified</span>
+    <span class="pill pill-purple">📊 Analytics</span>
     <span class="pill-muted">🕐 {exact_time_str(st.session_state.tz)} &nbsp;·&nbsp; {_loc_lbl}</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
+
 # ──────────────────────────────────────────────────────────────
-# 12. Alert banner
+# 11. Alert banner
 # ──────────────────────────────────────────────────────────────
 
 if st.session_state.alert_enabled:
     if _cur_ci <= st.session_state.alert_thresh:
         st.markdown(
             f'<div class="alert alert-g">'
-            f'<strong style="font-size:1.02rem;">🟢 GREEN GRID ALERT!</strong><br>'
-            f'<span style="margin-top:5px;display:block;">Current carbon intensity is <strong>{_cur_ci:.0f} gCO₂/kWh</strong> '
-            f'— below your {st.session_state.alert_thresh}g threshold. Perfect time to run high-power appliances!</span></div>',
+            f'<strong style="color:#10b981;font-size:1.1rem;">🟢 GREEN GRID ALERT!</strong>'
+            f'<span style="color:#94a3b8;margin-left:8px;"> CI is <strong style="color:#10b981;">{_cur_ci:.0f}</strong> gCO₂/kWh'
+            f' — below your {st.session_state.alert_thresh} g threshold. Great time to run appliances!</span></div>',
             unsafe_allow_html=True,
         )
     elif _cur_ci > 400:
         st.markdown(
             f'<div class="alert alert-r">'
-            f'<strong style="font-size:1.02rem;">🔴 HIGH CARBON ALERT</strong><br>'
-            f'<span style="margin-top:5px;display:block;">Current carbon intensity is <strong>{_cur_ci:.0f} gCO₂/kWh</strong> '
-            f'— consider delaying non-urgent appliances.</span></div>',
+            f'<strong style="color:#ef4444;font-size:1.1rem;">🔴 HIGH CARBON ALERT</strong>'
+            f'<span style="color:#94a3b8;margin-left:8px;"> CI is <strong style="color:#ef4444;">{_cur_ci:.0f}</strong> gCO₂/kWh'
+            f' — consider delaying non-urgent appliances.</span></div>',
             unsafe_allow_html=True,
         )
 
+
 # ──────────────────────────────────────────────────────────────
-# 13. Live ticker
+# 12. Live ticker
 # ──────────────────────────────────────────────────────────────
 
 _trend = "↑" if _cur_ci > float(_full["ci"].mean()) else "↓"
@@ -1631,52 +1613,51 @@ _tc    = ci_color(_cur_ci)
 st.markdown(f"""
 <div class="ticker">
   <div class="ticker-dot"></div>
-  <span style="color:var(--text-muted);font-size:0.82rem;font-weight:700;white-space:nowrap;">LIVE GRID</span>
-  <span style="color:{_tc};font-weight:800;font-size:0.98rem;display:flex;align-items:center;gap:5px;">
-    {ci_emoji(_cur_ci)} {_cur_ci:.0f} gCO₂/kWh <span style="font-size:1.05rem;">{_trend}</span>
+  <span style="color:var(--text-muted);font-size:.8rem;font-weight:600;white-space:nowrap;">LIVE GRID</span>
+  <span style="color:{_tc};font-weight:700;font-size:.9rem;">
+    {ci_emoji(_cur_ci)} {_cur_ci:.0f} gCO₂/kWh {_trend}
   </span>
-  <span style="color:var(--text-faint);">·</span>
-  <span style="color:#3b82f6;font-size:0.82rem;font-weight:600;">Best: {to_12h(_best["start"]) if _best else "--:--"}</span>
-  <span style="color:var(--text-faint);">·</span>
-  <span style="color:#f59e0b;font-size:0.82rem;font-weight:600;">🔥 {_stats["streak"]}-day streak</span>
-  <span style="color:var(--text-faint);">·</span>
-  <span style="color:#10b981;font-size:0.82rem;font-weight:600;">Saved {_stats["co2"]:.3f} kg CO₂</span>
-  <span style="color:var(--text-faint);">·</span>
-  <span style="color:var(--text-muted);font-size:0.82rem;">{st.session_state.data_source}</span>
+  <span style="color:var(--text-muted);">·</span>
+  <span style="color:var(--accent-blue);font-size:.8rem;">Best: {to_12h(_best["start"]) if _best else "--"}</span>
+  <span style="color:var(--text-muted);">·</span>
+  <span style="color:var(--accent-amber);font-size:.8rem;">🔥 {_stats["streak"]}-day streak</span>
+  <span style="color:var(--text-muted);">·</span>
+  <span style="color:var(--accent-green);font-size:.8rem;">Saved {_stats["co2"]:.3f} kg CO₂ total</span>
+  <span style="color:var(--text-muted);">·</span>
+  <span style="color:var(--text-secondary);font-size:.8rem;">{st.session_state.data_source}</span>
 </div>
+<div style="margin-bottom:1rem;"></div>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='space-md'></div>", unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────────────────────
-# 14. KPI row
+# 13. KPI row
 # ──────────────────────────────────────────────────────────────
 
-st.markdown('<p class="section-title">📊 Session Overview</p>', unsafe_allow_html=True)
+st.markdown("<div class='section-heading'>📊 Session Overview</div>", unsafe_allow_html=True)
+
 _k = st.columns(6)
 
-def _kpi(col, label, value, sub, border="#10b981", val_color=None):
-    _vc = val_color or "var(--text-primary)"
+def _kpi(col, label, value, sub, border="#10b981", val_color="white"):
     col.markdown(
-        f'<div class="kpi" style="border-left-color:{border};">'
+        f'<div class="kpi" style="border-top-color:{border};">'
         f'<div class="kpi-lbl">{label}</div>'
-        f'<div class="kpi-val" style="color:{_vc};">{value}</div>'
+        f'<div class="kpi-val" style="color:{val_color};">{value}</div>'
         f'<div class="kpi-sub">{sub}</div></div>',
         unsafe_allow_html=True,
     )
 
-_kpi(_k[0], "🌍 Location", _loc_lbl[:20], st.session_state.tz[:18])
-_kpi(_k[1], "🕐 Current Time", _now_12, "🟢 Live" if st.session_state.live_mode else "Static")
+_kpi(_k[0], "🌍 Location", _loc_lbl[:22], st.session_state.tz)
+_kpi(_k[1], "🕐 Now", _now_12, "🟢 Live" if st.session_state.live_mode else "Static")
 _icon = APPLIANCES[st.session_state.appliance]["icon"]
-_app_name = st.session_state.appliance.split("/")[0][:12]
 _kpi(_k[2], "🔌 Appliance",
-     f'{_icon} {_app_name}',
+     f'{_icon} {st.session_state.appliance.split("/")[0][:14]}',
      f'{st.session_state.kw:.2f} kW · {ceil15(st.session_state.duration)} min')
 _kpi(_k[3], "⚡ CI Now", f"{_cur_ci:.0f}", f"{ci_label(_cur_ci)} · gCO₂/kWh",
      border=ci_color(_cur_ci), val_color=ci_color(_cur_ci))
 _kpi(_k[4], "✨ Best Window",
      to_12h(_best["start"]) if _best else "--:--",
-     f"Save ~{_pot_pct:.1f}%" if _pot_pct > 0 else "No savings",
+     f"Save ~{_pot_pct:.1f}%" if _pot_pct > 0 else "No gap",
      border="#10b981" if _best else "#64748b",
      val_color="#10b981" if _best else "#64748b")
 _sc = "#10b981" if _stats["streak"] >= 3 else "#f59e0b" if _stats["streak"] else "#64748b"
@@ -1685,270 +1666,246 @@ _kpi(_k[5], "🔥 Streak", f'{_stats["streak"]} days',
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
+
 # ──────────────────────────────────────────────────────────────
-# 15. VERTICAL PAGE ROUTER
+# 14. MAIN TABS
 # ──────────────────────────────────────────────────────────────
 
-_page = st.session_state.active_page
+T1, T2, T3, T4, T5, T6, T7 = st.tabs([
+    "📈 Dashboard", "🎯 Smart Advisor", "🌤️ Weekly Forecast",
+    "📊 Analytics", "🏅 Achievements", "📝 Logger", "🔍 Data",
+])
 
-# ══════════════════════════════════════════════════════════════
-# PAGE: Dashboard
-# ══════════════════════════════════════════════════════════════
-if _page == "dashboard":
-    col_main, col_side = st.columns([2, 1], gap="large")
+
+# ══════════════════════════════════════════════
+# TAB 1 — Dashboard
+# ══════════════════════════════════════════════
+with T1:
+    col_main, col_side = st.columns([2, 1])
 
     with col_main:
-        st.markdown('<p class="section-subtitle">24-Hour Carbon Intensity Profile</p>', unsafe_allow_html=True)
-        st.markdown(f"<p style='color:var(--text-muted);font-size:0.88rem;margin-bottom:1.5rem;'>{st.session_state.tz} · Real-time grid data</p>", unsafe_allow_html=True)
+        st.markdown("<div class='sub-heading'>24-Hour Carbon Intensity · {st.session_state.tz}</div>", unsafe_allow_html=True)
 
         # Gauge
         fig_g = go.Figure(go.Indicator(
             mode="gauge+number+delta",
             value=_cur_ci,
             delta={"reference": float(_full["ci"].mean()), "valueformat": ".0f", "suffix": " avg"},
-            title={"text": "Current Carbon Intensity (gCO₂/kWh)", "font": {"color": "#cbd5e1", "size": 13}},
-            number={"font": {"color": ci_color(_cur_ci), "size": 40, "family": "Inter"}},
+            title={"text": "Current CI (gCO₂/kWh)", "font": {"color": "#94a3b8", "size": 13}},
+            number={"font": {"color": ci_color(_cur_ci), "size": 36}},
             gauge={
-                "axis":    {"range": [0, 700], "tickcolor": "#64748b", "tickfont": {"color": "#94a3b8", "size": 10}},
-                "bar":     {"color": ci_color(_cur_ci), "thickness": 0.28},
-                "bgcolor": "rgba(30, 27, 75, 0.4)", "borderwidth": 0,
+                "axis":    {"range": [0, 700], "tickcolor": "#475569", "tickfont": {"color": "#475569", "size": 10}},
+                "bar":     {"color": ci_color(_cur_ci), "thickness": 0.25},
+                "bgcolor": "#111827", "borderwidth": 0,
                 "steps":   [
-                    {"range": [0, 200],   "color": "rgba(16, 185, 129, 0.15)"},
-                    {"range": [200, 400], "color": "rgba(245, 158, 11, 0.12)"},
-                    {"range": [400, 700], "color": "rgba(239, 68, 68, 0.12)"},
+                    {"range": [0, 200],   "color": "rgba(16,185,129,.1)"},
+                    {"range": [200, 400], "color": "rgba(245,158,11,.08)"},
+                    {"range": [400, 700], "color": "rgba(239,68,68,.08)"},
                 ],
-                "threshold": {"line": {"color": "#10b981", "width": 3}, "thickness": 0.8, "value": _cur_ci},
+                "threshold": {"line": {"color": "#10b981", "width": 2}, "thickness": 0.75, "value": _cur_ci},
             },
         ))
         fig_g.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", font={"color": "#e2e8f0", "family": "Inter"},
-            height=210, margin={"l": 40, "r": 40, "t": 45, "b": 15},
+            paper_bgcolor="#0a0f1a", font={"color": "#cbd5e1"},
+            height=200, margin={"l": 30, "r": 30, "t": 30, "b": 10},
         )
         st.plotly_chart(fig_g, use_container_width=True)
-
-        st.markdown("<div class='space-md'></div>", unsafe_allow_html=True)
 
         # 24-h line chart
         fig_l = go.Figure()
         fig_l.add_trace(go.Scatter(
             x=_full["time"], y=_full["ci"],
-            fill="tozeroy", fillcolor="rgba(16, 185, 129, 0.08)",
-            line={"color": "#10b981", "width": 3},
+            fill="tozeroy", fillcolor="rgba(16,185,129,.06)",
+            line={"color": "#10b981", "width": 2.5},
             hovertemplate="<b>%{x}</b><br>CI: %{y:.1f} gCO₂/kWh<extra></extra>",
         ))
-        fig_l.add_hrect(y0=0,   y1=200, fillcolor="#10b981", opacity=0.04, line_width=0)
-        fig_l.add_hrect(y0=200, y1=400, fillcolor="#f59e0b", opacity=0.04, line_width=0)
-        fig_l.add_hrect(y0=400, y1=900, fillcolor="#ef4444", opacity=0.04, line_width=0)
+        fig_l.add_hrect(y0=0,   y1=200, fillcolor="#10b981", opacity=0.03, line_width=0)
+        fig_l.add_hrect(y0=200, y1=400, fillcolor="#f59e0b", opacity=0.03, line_width=0)
+        fig_l.add_hrect(y0=400, y1=900, fillcolor="#ef4444", opacity=0.03, line_width=0)
         for wi, w in enumerate((_windows or [])[:3]):
             fig_l.add_vrect(
                 x0=w["start"], x1=w["end"],
-                fillcolor=w["color"], opacity=0.18,
-                line_width=3 if wi == 0 else 2, line_color=w["color"], layer="below",
+                fillcolor=w["color"], opacity=0.15,
+                line_width=2 if wi == 0 else 1, line_color=w["color"], layer="below",
             )
-        _ymax = float(_full["ci"].max()) * 1.15
-        fig_l.add_vline(x=_now_slot, line_dash="dash", line_color="#10b981", line_width=2.5)
-        fig_l.add_vline(x=st.session_state.deadline, line_dash="dash", line_color="#ef4444", line_width=2.5)
-        fig_l.add_annotation(x=_now_slot, y=_ymax*0.93, text="NOW",
-                              showarrow=False, font={"color": "#10b981", "size": 11, "family": "Inter"},
-                              bgcolor="rgba(15, 12, 41, 0.85)", borderpad=5)
-        fig_l.add_annotation(x=st.session_state.deadline, y=_ymax*0.93, text="DEADLINE",
-                              showarrow=False, font={"color": "#ef4444", "size": 11, "family": "Inter"},
-                              bgcolor="rgba(15, 12, 41, 0.85)", borderpad=5)
+        _ymax = float(_full["ci"].max()) * 1.12
+        fig_l.add_vline(x=_now_slot, line_dash="dash", line_color="#10b981", line_width=1.8)
+        fig_l.add_vline(x=st.session_state.deadline, line_dash="dash", line_color="#ef4444", line_width=1.8)
+        fig_l.add_annotation(x=_now_slot, y=_ymax, text="NOW",
+                              showarrow=False, font={"color": "#10b981", "size": 11},
+                              bgcolor="rgba(10,15,26,.9)")
+        fig_l.add_annotation(x=st.session_state.deadline, y=_ymax, text="DEADLINE",
+                              showarrow=False, font={"color": "#ef4444", "size": 11},
+                              bgcolor="rgba(10,15,26,.9)")
         fig_l.add_hline(y=float(_full["ci"].mean()), line_dash="dot", line_color="#3b82f6",
-                        line_width=2, annotation_text="Daily average",
-                        annotation_font_color="#3b82f6", annotation_font_size=10)
+                        line_width=1, annotation_text="Daily avg",
+                        annotation_font_color="#3b82f6")
         fig_l.update_layout(
-            plot_bgcolor="rgba(15, 12, 41, 0.4)", paper_bgcolor="rgba(0,0,0,0)",
-            font={"color": "#e2e8f0", "family": "Inter"},
-            xaxis={"gridcolor": "rgba(139, 92, 246, 0.15)", "title": "Time of Day",
-                   "tickangle": -45, "nticks": 13},
-            yaxis={"gridcolor": "rgba(139, 92, 246, 0.15)",
-                   "title": "Carbon Intensity (gCO₂/kWh)", "range": [0, _ymax * 1.05]},
-            height=390, margin={"l": 60, "r": 40, "t": 30, "b": 65}, showlegend=False,
+            plot_bgcolor="#0a0f1a", paper_bgcolor="#0a0f1a", font={"color": "#cbd5e1"},
+            xaxis={"gridcolor": "#1e293b", "title": "Time of Day", "tickangle": -45, "nticks": 13},
+            yaxis={"gridcolor": "#1e293b", "title": "gCO₂/kWh", "range": [0, _ymax * 1.1]},
+            height=360, margin={"l": 55, "r": 30, "t": 20, "b": 55}, showlegend=False,
         )
         st.plotly_chart(fig_l, use_container_width=True)
 
     with col_side:
-        st.markdown('<p class="section-subtitle">Grid Energy Mix</p>', unsafe_allow_html=True)
-        st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
+        st.markdown("<div class='sub-heading'>Grid Mix</div>", unsafe_allow_html=True)
         _last = _raw.iloc[-1]
         _vals = [safe_float(_last.get(c, 0)) for c in ["thermal_mw", "hydro_mw", "nuclear_mw", "res_mw"]]
         _tot  = sum(_vals) or 1
         fig_p = go.Figure(data=[go.Pie(
             labels=["Thermal", "Hydro", "Nuclear", "Renewable"], values=_vals,
-            hole=0.68, marker_colors=["#ef4444", "#3b82f6", "#a78bfa", "#10b981"],
-            textinfo="label+percent", textfont={"color": "white", "size": 9, "family": "Inter"},
-            textposition="outside",
+            hole=0.65, marker_colors=["#ef4444", "#3b82f6", "#8b5cf6", "#10b981"],
+            textinfo="label+percent", textfont={"color": "white", "size": 9},
         )])
         fig_p.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", height=285, showlegend=False,
-            margin={"t": 12, "b": 12, "l": 12, "r": 12},
+            paper_bgcolor="#0a0f1a", height=275,
+            showlegend=False, margin={"t": 10, "b": 10, "l": 10, "r": 10},
             annotations=[{"text": f"<b>{_tot/1000:.1f}</b><br>GW",
-                           "x": 0.5, "y": 0.5,
-                           "font": {"size": 16, "color": "#ffffff", "family": "Inter"},
-                           "showarrow": False}],
+                           "x": 0.5, "y": 0.5, "font": {"size": 16, "color": "#f8fafc"}, "showarrow": False}],
         )
         st.plotly_chart(fig_p, use_container_width=True)
 
-        st.markdown("<div class='space-md'></div>", unsafe_allow_html=True)
-
         # CO₂ equivalents
-        st.markdown('<p class="section-subtitle">🌿 CO₂ Equivalents</p>', unsafe_allow_html=True)
+        st.markdown("<div class='sub-heading'>🌿 CO₂ Equivalents</div>", unsafe_allow_html=True)
         _co2_now = co2_kg(_nrg, _cur_ci)
         _co2_opt = co2_kg(_nrg, _best["avg_ci"]) if _best else _co2_now
         _saved   = max(0.0, _co2_now - _co2_opt)
         st.markdown(
-            f'<div class="card">'
-            f'<div style="color:var(--text-muted);font-size:0.72rem;margin-bottom:7px;">RUNNING NOW</div>'
-            f'<div style="color:#ef4444;font-size:0.92rem;font-weight:700;margin-bottom:10px;">{_co2_now:.4f} kg CO₂</div>'
-            f'<div style="color:#10b981;font-size:0.82rem;font-weight:700;margin-bottom:8px;">Optimising saves {_saved:.4f} kg:</div>',
+            f'<div class="info-card" style="padding: 14px !important;">'
+            f'<div style="color:var(--text-muted);font-size:.75rem;margin-bottom:8px;">Running now: {_co2_now:.3f} kg CO₂</div>'
+            f'<div style="color:var(--accent-green);font-size:.85rem;font-weight:600;margin-bottom:8px;">Optimising saves:</div>',
             unsafe_allow_html=True,
         )
         for lbl, val in co2_equivalents(_saved).items():
             st.markdown(
-                f'<div style="display:flex;justify-content:space-between;padding:7px 0;'
-                f'border-bottom:1px solid var(--border-subtle);font-size:0.82rem;line-height:1.5;">'
+                f'<div style="display:flex;justify-content:space-between;padding:6px 0;'
+                f'border-bottom:1px solid var(--border-light);font-size:.8rem;">'
                 f'<span style="color:var(--text-secondary);">{lbl}</span>'
-                f'<span style="color:var(--text-primary);font-weight:700;">{val:.2f}</span></div>',
+                f'<span style="color:white;font-weight:600;">{val:.2f}</span></div>',
                 unsafe_allow_html=True,
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════
-# PAGE: Smart Advisor
-# ══════════════════════════════════════════════════════════════
-elif _page == "advisor":
-    st.markdown(f'<p class="section-title">🏆 Top {_top_k} Optimal Windows</p>', unsafe_allow_html=True)
-    st.markdown(
-        f"<p style='color:var(--text-muted);font-size:0.92rem;margin-bottom:1.75rem;'>"
-        f"Scheduling window: <strong style='color:#10b981;'>{_now_12}</strong> → "
-        f"<strong style='color:#ef4444;'>{_dl_12}</strong></p>",
-        unsafe_allow_html=True,
-    )
+
+# ══════════════════════════════════════════════
+# TAB 2 — Smart Advisor
+# ══════════════════════════════════════════════
+with T2:
+    st.markdown(f"<div class='section-heading'>🏆 Top {_top_k} Optimal Windows · {_now_12} → {_dl_12}</div>", unsafe_allow_html=True)
 
     if not _windows:
-        st.warning("⚠️ No valid windows found — try extending the deadline or reducing duration.")
+        st.warning("⚠️ No valid windows found — extend the deadline or reduce duration.")
         st.info(
-            f"**Debug info:** Now={_now_12} · Deadline={_dl_12} · "
-            f"Duration={ceil15(st.session_state.duration)} min · "
-            f"Available={(hm_to_mins(st.session_state.deadline) - hm_to_mins(_now_slot)) % 1440} min"
+            f"Debug: now={_now_12} · deadline={_dl_12} · "
+            f"duration={ceil15(st.session_state.duration)} min · available={_avail} min"
         )
     else:
         for _ri in range(0, len(_windows), 3):
             _row_wins = _windows[_ri : _ri + 3]
-            _cols     = st.columns(len(_row_wins), gap="medium")
+            _cols     = st.columns(len(_row_wins))
             for _ci2, (_col, _w) in enumerate(zip(_cols, _row_wins)):
-                _gi      = _ri + _ci2
-                _rank    = _gi + 1
+                _gi   = _ri + _ci2
+                _rank = _gi + 1
                 _is_best = _gi == 0
-                _co2w    = co2_kg(_nrg, _w["avg_ci"])
-                _co2n    = co2_kg(_nrg, _cur_ci)
-                _sav     = max(0.0, _co2n - _co2w)
-                _ppct    = (_sav / _co2n * 100) if _co2n > 0 else 0
-                _conf    = max(65, min(99, 100 - int((_w["max_ci"] - _w["min_ci"]) / 5)))
-                _eq_t    = _sav / CO2_EQUIV["🌳 Tree-days (absorption)"]
-                _eq_k    = _sav / CO2_EQUIV["🚗 km not driven"]
-                _bdr     = "3px solid #10b981" if _is_best else "2px solid var(--border-primary)"
+                _co2w = co2_kg(_nrg, _w["avg_ci"])
+                _co2n = co2_kg(_nrg, _cur_ci)
+                _sav  = max(0.0, _co2n - _co2w)
+                _ppct = (_sav / _co2n * 100) if _co2n > 0 else 0
+                _conf = max(60, min(99, 100 - int((_w["max_ci"] - _w["min_ci"]) / 5)))
+                _eq_t = _sav / CO2_EQUIV["🌳 Tree-days (absorption)"]
+                _eq_k = _sav / CO2_EQUIV["🚗 km not driven"]
+                _cls = "rec-card best" if _is_best else "rec-card"
                 with _col:
                     st.markdown(f"""
-<div class="rec" style="border:{_bdr};{'box-shadow:0 16px 48px rgba(16,185,129,0.2);' if _is_best else ''}">
-  <div style="text-align:center;margin-bottom:11px;">
-    <span style="background:{'linear-gradient(135deg,#10b981,#059669)' if _is_best else 'rgba(139,92,246,0.25)'};
-          color:white;padding:5px 14px;border-radius:8px;font-size:0.78rem;font-weight:800;
-          box-shadow:{'0 4px 12px rgba(16,185,129,0.3)' if _is_best else 'none'};">
-      {'🥇 BEST OPTION' if _rank==1 else f'#{_rank}'}
+<div class="{_cls}">
+  <div style="text-align:center;margin-bottom:12px;">
+    <span style="background:{'#10b981' if _is_best else '#1e3a5f'};
+          color:{'#0f172a' if _is_best else '#94a3b8'};
+          padding:4px 12px;border-radius:6px;font-size:.75rem;font-weight:700;">
+      {'🥇 BEST' if _rank==1 else f'#{_rank}'}
     </span>
-    <span style="background:rgba(16,185,129,0.15);color:#10b981;
-          padding:3px 9px;border-radius:6px;font-size:0.68rem;font-weight:700;margin-left:7px;">
-      {_conf}% conf
+    <span style="background:rgba(16,185,129,.1);color:#10b981;
+          padding:3px 8px;border-radius:4px;font-size:.68rem;font-weight:600;margin-left:6px;">
+      {_conf}% conf.
     </span>
   </div>
-  <div style="font-size:1.25rem;font-weight:800;color:var(--text-primary);text-align:center;
-       margin-bottom:13px;letter-spacing:-0.5px;">
+  <div style="font-size:1.15rem;font-weight:700;color:white;text-align:center;margin-bottom:12px;">
     {to_12h(_w['start'])} — {to_12h(_w['end'])}
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:11px;">
-    <div style="background:var(--bg-secondary);padding:9px 7px;border-radius:10px;text-align:center;
-         border:2px solid var(--border-subtle);">
-      <div style="color:var(--text-muted);font-size:0.62rem;margin-bottom:3px;font-weight:600;">AVG CI</div>
-      <div style="color:{_w['color']};font-size:1.05rem;font-weight:800;">{_w['avg_ci']:.0f}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+    <div style="background:var(--bg-secondary);padding:10px 6px;border-radius:10px;text-align:center;">
+      <div style="color:var(--text-muted);font-size:.65rem;margin-bottom:3px;">CI avg</div>
+      <div style="color:{_w['color']};font-size:1rem;font-weight:700;">{_w['avg_ci']:.0f}</div>
     </div>
-    <div style="background:var(--bg-secondary);padding:9px 7px;border-radius:10px;text-align:center;
-         border:2px solid var(--border-subtle);">
-      <div style="color:var(--text-muted);font-size:0.62rem;margin-bottom:3px;font-weight:600;">CO₂ OUT</div>
-      <div style="color:var(--text-primary);font-size:1.05rem;font-weight:800;">{_co2w:.3f} kg</div>
+    <div style="background:var(--bg-secondary);padding:10px 6px;border-radius:10px;text-align:center;">
+      <div style="color:var(--text-muted);font-size:.65rem;margin-bottom:3px;">CO₂</div>
+      <div style="color:white;font-size:1rem;font-weight:700;">{_co2w:.3f} kg</div>
     </div>
   </div>
-  <div style="background:rgba(16,185,129,0.1);padding:9px 11px;border-radius:10px;
-       border:2px solid rgba(16,185,129,0.25);margin-bottom:9px;">
-    <span style="color:#10b981;font-size:0.82rem;font-weight:700;">
-      💰 Save {_sav:.3f} kg ({_ppct:.1f}%)
+  <div style="background:rgba(16,185,129,.08);padding:8px 10px;border-radius:10px;
+       border:1px solid rgba(16,185,129,.2);margin-bottom:6px;text-align:center;">
+    <span style="color:var(--accent-green);font-size:.82rem;font-weight:600;">
+      💰 Save {_sav:.3f} kg ({_ppct:.0f}%)
     </span>
   </div>
-  <div style="font-size:0.72rem;color:var(--text-faint);text-align:center;line-height:1.5;">
-    ≈ {_eq_t:.1f} tree-days · {_eq_k:.1f} km
+  <div style="font-size:.72rem;color:var(--text-muted);text-align:center;">
+    ≈ {_eq_t:.1f} tree-days · {_eq_k:.1f} km not driven
   </div>
 </div>""", unsafe_allow_html=True)
-                    if st.button("✅ Select This Window", key=f"sel_{_gi}", use_container_width=True):
+                    if st.button("✅ Select", key=f"sel_{_gi}", use_container_width=True):
                         st.session_state.sel_window = _gi
-                        st.success(f"✅ Selected: {to_12h(_w['start'])} – {to_12h(_w['end'])}")
-
-        st.markdown("<div class='space-lg'></div>", unsafe_allow_html=True)
+                        st.success(f"Selected: {to_12h(_w['start'])} – {to_12h(_w['end'])}")
 
     # Heatmap
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<p class="section-subtitle">🗓️ Today\'s CI Heatmap</p>', unsafe_allow_html=True)
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
+    st.markdown("<div class='sub-heading'>🗓️ Today's CI Heatmap (24 h)</div>", unsafe_allow_html=True)
     _hdata = _full["ci"].values.reshape(6, 16) if len(_full) == 96 else np.tile(_full["ci"].values[:1], (6, 16))
     fig_h = go.Figure(data=go.Heatmap(
         z=_hdata,
-        colorscale=[[0, "#10b981"], [0.45, "#f59e0b"], [1, "#ef4444"]],
+        colorscale=[[0, "#10b981"], [0.4, "#f59e0b"], [1, "#ef4444"]],
         showscale=True,
-        colorbar={"title": "gCO₂/kWh", "tickfont": {"color": "#cbd5e1", "family": "Inter"}},
+        colorbar={"title": "gCO₂/kWh", "tickfont": {"color": "#94a3b8"}},
         hovertemplate="CI: %{z:.1f} gCO₂/kWh<extra></extra>",
     ))
     fig_h.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", height=195,
-        margin={"l": 22, "r": 22, "t": 22, "b": 22},
+        paper_bgcolor="#0a0f1a", height=190,
+        margin={"l": 20, "r": 20, "t": 20, "b": 20},
         xaxis={"showticklabels": False}, yaxis={"showticklabels": False},
     )
     st.plotly_chart(fig_h, use_container_width=True)
 
-# ══════════════════════════════════════════════════════════════
-# PAGE: Weekly Forecast
-# ══════════════════════════════════════════════════════════════
-elif _page == "forecast":
-    st.markdown('<p class="section-title">🌤️ 7-Day Grid CI Forecast</p>', unsafe_allow_html=True)
-    st.markdown("<p style='color:var(--text-muted);font-size:0.88rem;margin-bottom:1.75rem;'>Simulated forecast based on historical demand patterns and current grid conditions</p>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════
+# TAB 3 — Weekly Forecast
+# ══════════════════════════════════════════════
+with T3:
+    st.markdown("<div class='section-heading'>🌤️ 7-Day Grid CI Forecast</div>", unsafe_allow_html=True)
+    st.caption("Simulated forecast based on day-of-week demand patterns + current grid conditions.")
 
     fig_w = go.Figure()
     fig_w.add_trace(go.Bar(name="Night", x=_weekly["date"], y=_weekly["ci_night"],
-                           marker_color="#10b981", opacity=0.85))
+                           marker_color="#10b981", opacity=0.8))
     fig_w.add_trace(go.Bar(name="Day",   x=_weekly["date"], y=_weekly["ci_day"],
-                           marker_color="#3b82f6", opacity=0.85))
+                           marker_color="#3b82f6", opacity=0.8))
     fig_w.add_trace(go.Bar(name="Peak",  x=_weekly["date"], y=_weekly["ci_peak"],
-                           marker_color="#ef4444", opacity=0.85))
+                           marker_color="#ef4444", opacity=0.8))
     fig_w.add_trace(go.Scatter(
         name="Daily avg", x=_weekly["date"], y=_weekly["avg"],
-        mode="lines+markers", line={"color": "#f59e0b", "width": 3, "dash": "dot"},
-        marker={"size": 7, "color": "#f59e0b"},
+        mode="lines+markers", line={"color": "#f59e0b", "width": 2, "dash": "dot"},
+        marker={"size": 7},
     ))
     fig_w.update_layout(
-        barmode="group", plot_bgcolor="rgba(15, 12, 41, 0.4)", paper_bgcolor="rgba(0,0,0,0)",
-        font={"color": "#e2e8f0", "family": "Inter"}, height=390,
-        legend={"orientation": "h", "y": 1.07, "x": 0.5, "xanchor": "center", "font": {"size": 11}},
-        xaxis={"gridcolor": "rgba(139, 92, 246, 0.15)"},
-        yaxis={"gridcolor": "rgba(139, 92, 246, 0.15)", "title": "Carbon Intensity (gCO₂/kWh)"},
-        margin={"l": 60, "r": 40, "t": 55, "b": 45},
+        barmode="group", plot_bgcolor="#0a0f1a", paper_bgcolor="#0a0f1a",
+        font={"color": "#cbd5e1"}, height=370,
+        legend={"orientation": "h", "y": 1.05, "x": 0.5, "xanchor": "center"},
+        xaxis={"gridcolor": "#1e293b"},
+        yaxis={"gridcolor": "#1e293b", "title": "gCO₂/kWh"},
+        margin={"l": 50, "r": 30, "t": 50, "b": 40},
     )
     st.plotly_chart(fig_w, use_container_width=True)
 
-    st.markdown("<div class='space-md'></div>", unsafe_allow_html=True)
-    st.markdown('<p class="section-subtitle">📅 Daily Outlook</p>', unsafe_allow_html=True)
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
+    st.markdown("<div class='sub-heading'>📅 Daily Outlook</div>", unsafe_allow_html=True)
     _dc = st.columns(7)
     for _di, (_dcol, _dr) in enumerate(zip(_dc, _weekly.itertuples())):
         with _dcol:
@@ -1958,25 +1915,23 @@ elif _page == "forecast":
                 else "Peak"
             )
             _icon_d = "🌙" if _best_p == "Night" else "☀️" if _best_p == "Day" else "⚡"
-            _bdr_d  = "3px solid #10b981" if _di == 0 else "2px solid var(--border-primary)"
+            _bdr_d  = "2px solid #10b981" if _di == 0 else "1px solid var(--border-color)"
             st.markdown(f"""
-<div style="background:var(--bg-card);border-radius:14px;padding:13px 9px;text-align:center;
-     border:{_bdr_d};box-shadow:var(--shadow-card);">
-  <div style="color:var(--text-muted);font-size:0.67rem;font-weight:700;margin-bottom:5px;">{_dr.label.upper()}</div>
-  <div style="font-size:1.65rem;margin:7px 0;">{_icon_d}</div>
-  <div style="color:{ci_color(_dr.avg)};font-size:1.1rem;font-weight:800;margin:5px 0;">{_dr.avg:.0f}</div>
-  <div style="color:var(--text-faint);font-size:0.62rem;margin-bottom:7px;">gCO₂/kWh</div>
-  <div style="background:rgba(16,185,129,0.12);border-radius:6px;
-       padding:3px 5px;margin-top:7px;font-size:0.62rem;color:#10b981;font-weight:700;">
+<div style="background:var(--bg-card);border-radius:12px;padding:12px 8px;
+     text-align:center;border:{_bdr_d};">
+  <div style="color:var(--text-muted);font-size:.7rem;font-weight:600;">{_dr.label}</div>
+  <div style="font-size:1.2rem;margin:6px 0;">{_icon_d}</div>
+  <div style="color:{ci_color(_dr.avg)};font-size:1rem;font-weight:700;">{_dr.avg:.0f}</div>
+  <div style="color:var(--text-muted);font-size:.65rem;">gCO₂/kWh</div>
+  <div style="background:rgba(16,185,129,.1);border-radius:4px;
+       padding:3px 6px;margin-top:6px;font-size:.62rem;color:#10b981;">
     Best: {_best_p}
   </div>
 </div>""", unsafe_allow_html=True)
 
     # Regional comparison
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<p class="section-subtitle">🗺️ Regional CI Comparison</p>', unsafe_allow_html=True)
-    st.markdown("<p style='color:var(--text-muted);font-size:0.83rem;margin-bottom:1.25rem;'>Average carbon intensity across global grid zones</p>", unsafe_allow_html=True)
-
+    st.markdown("<div class='section-heading'>🗺️ Regional CI Comparison</div>", unsafe_allow_html=True)
     _flat = [
         {"zone": z, "region": r, "ci": zd["ci_avg"]}
         for r, rd in GRID_ZONES.items()
@@ -1987,58 +1942,53 @@ elif _page == "forecast":
         x=_df_reg["ci"], y=_df_reg["zone"], orientation="h",
         marker_color=[ci_color(c) for c in _df_reg["ci"]],
         text=_df_reg["ci"].astype(int), textposition="outside",
-        textfont={"color": "#cbd5e1", "size": 10, "family": "Inter"},
+        textfont={"color": "#94a3b8", "size": 10},
     ))
     fig_reg.update_layout(
-        plot_bgcolor="rgba(15, 12, 41, 0.4)", paper_bgcolor="rgba(0,0,0,0)",
-        font={"color": "#e2e8f0", "family": "Inter"},
-        height=580, margin={"l": 195, "r": 65, "t": 25, "b": 45},
-        xaxis={"gridcolor": "rgba(139, 92, 246, 0.15)", "title": "Average CI (gCO₂/kWh)"},
-        yaxis={"gridcolor": "rgba(139, 92, 246, 0.15)"},
+        plot_bgcolor="#0a0f1a", paper_bgcolor="#0a0f1a", font={"color": "#cbd5e1"},
+        height=560, margin={"l": 190, "r": 60, "t": 20, "b": 40},
+        xaxis={"gridcolor": "#1e293b", "title": "Avg CI (gCO₂/kWh)"},
+        yaxis={"gridcolor": "#1e293b"},
     )
     st.plotly_chart(fig_reg, use_container_width=True)
 
-# ══════════════════════════════════════════════════════════════
-# PAGE: Analytics
-# ══════════════════════════════════════════════════════════════
-elif _page == "analytics":
-    st.markdown('<p class="section-title">📊 Baseline vs Optimised Comparison</p>', unsafe_allow_html=True)
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════
+# TAB 4 — Analytics
+# ══════════════════════════════════════════════
+with T4:
+    st.markdown("<div class='section-heading'>📊 Baseline vs Optimised</div>", unsafe_allow_html=True)
 
     _co2_now = co2_kg(_nrg, _cur_ci)
     _co2_opt = co2_kg(_nrg, _best["avg_ci"]) if _best else _co2_now
     _proj    = max(0.0, _co2_now - _co2_opt)
     _proj_p  = (_proj / _co2_now * 100) if _co2_now > 0 else 0
 
-    _ac, _bc = st.columns([3, 2], gap="large")
+    _ac, _bc = st.columns([3, 2])
     with _ac:
         fig_c = go.Figure()
         fig_c.add_trace(go.Bar(
             name="Baseline (Now)", x=["CO₂ Emissions"], y=[_co2_now],
-            marker_color="#ef4444", text=[f"{_co2_now:.4f} kg"], textposition="outside", width=0.32,
-            textfont={"size": 12, "family": "Inter"},
+            marker_color="#ef4444", text=[f"{_co2_now:.3f} kg"], textposition="outside", width=0.28,
         ))
         fig_c.add_trace(go.Bar(
             name="Optimised (Best)", x=["CO₂ Emissions"], y=[_co2_opt],
-            marker_color="#10b981", text=[f"{_co2_opt:.4f} kg"], textposition="outside", width=0.32,
-            textfont={"size": 12, "family": "Inter"},
+            marker_color="#10b981", text=[f"{_co2_opt:.3f} kg"], textposition="outside", width=0.28,
         ))
         fig_c.update_layout(
-            barmode="group", plot_bgcolor="rgba(15, 12, 41, 0.4)", paper_bgcolor="rgba(0,0,0,0)",
-            font={"color": "#e2e8f0", "family": "Inter"}, height=330,
-            legend={"orientation": "h", "y": 1.07, "x": 0.5, "xanchor": "center", "font": {"size": 11}},
-            yaxis={"title": "CO₂ Emissions (kg)", "gridcolor": "rgba(139, 92, 246, 0.15)",
-                   "range": [0, max(_co2_now, _co2_opt) * 1.5]},
-            margin={"l": 60, "r": 40, "t": 55, "b": 45},
-            title={"text": f"💰 Potential saving: {_proj:.4f} kg CO₂ ({_proj_p:.1f}%)",
-                   "font": {"size": 14, "color": "#10b981", "family": "Inter"}},
+            barmode="group", plot_bgcolor="#0a0f1a", paper_bgcolor="#0a0f1a",
+            font={"color": "#cbd5e1"}, height=310,
+            legend={"orientation": "h", "y": 1.05, "x": 0.5, "xanchor": "center"},
+            yaxis={"title": "CO₂ (kg)", "gridcolor": "#1e293b",
+                   "range": [0, max(_co2_now, _co2_opt) * 1.45]},
+            margin={"l": 50, "r": 30, "t": 50, "b": 40},
+            title={"text": f"💰 Potential saving: {_proj:.3f} kg CO₂ ({_proj_p:.1f}%)",
+                   "font": {"size": 13, "color": "#10b981"}},
         )
         st.plotly_chart(fig_c, use_container_width=True)
 
     with _bc:
-        st.markdown('<p class="section-subtitle">💰 Daily CO₂ Budget</p>', unsafe_allow_html=True)
-        st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
+        st.markdown("<div class='sub-heading'>💰 Daily CO₂ Budget</div>", unsafe_allow_html=True)
         _today_str = datetime.now().strftime("%Y-%m-%d")
         _today_co2 = 0.0
         if not _log_df.empty and "date" in _log_df and "co2_kg" in _log_df:
@@ -2048,126 +1998,109 @@ elif _page == "analytics":
         _remaining = max(0.0, _budget - _today_co2)
         _bar_clr   = "#10b981" if _pct_used < 60 else "#f59e0b" if _pct_used < 90 else "#ef4444"
         st.markdown(f"""
-<div class="card">
-  <div style="display:flex;justify-content:space-between;margin-bottom:9px;">
-    <span style="color:var(--text-secondary);font-size:0.83rem;font-weight:600;">Daily Budget</span>
-    <span style="color:var(--text-primary);font-size:0.92rem;font-weight:800;">{_budget:.2f} kg CO₂</span>
+<div class="info-card" style="padding: 18px !important;">
+  <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+    <span style="color:var(--text-secondary);font-size:.85rem;">Daily Budget</span>
+    <span style="color:white;font-size:.88rem;font-weight:600;">{_budget:.1f} kg CO₂</span>
   </div>
   <div class="pb"><div class="pb-fill" style="width:{_pct_used:.0f}%;background:{_bar_clr};"></div></div>
-  <div style="display:flex;justify-content:space-between;margin-top:7px;">
-    <span style="color:{_bar_clr};font-size:0.82rem;font-weight:700;">Used {_today_co2:.4f} kg</span>
-    <span style="color:var(--text-faint);font-size:0.82rem;font-weight:600;">Left {_remaining:.4f} kg</span>
+  <div style="display:flex;justify-content:space-between;margin-top:6px;">
+    <span style="color:{_bar_clr};font-size:.8rem;font-weight:600;">Used {_today_co2:.3f} kg</span>
+    <span style="color:var(--text-muted);font-size:.8rem;">Left {_remaining:.3f} kg</span>
   </div>
-  <div style="margin-top:14px;padding-top:14px;border-top:2px solid var(--border-subtle);">
-    <div style="color:var(--text-muted);font-size:0.72rem;margin-bottom:7px;font-weight:600;">THIS SESSION:</div>
+  <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);">
+    <div style="color:var(--text-muted);font-size:.72rem;margin-bottom:4px;">This session:</div>
     <div style="display:flex;justify-content:space-between;">
-      <span style="color:#ef4444;font-size:0.82rem;font-weight:700;">Now: {_co2_now:.4f} kg</span>
-      <span style="color:#10b981;font-size:0.82rem;font-weight:700;">Opt: {_co2_opt:.4f} kg</span>
+      <span style="color:#ef4444;font-size:.8rem;">Now {_co2_now:.3f} kg</span>
+      <span style="color:#10b981;font-size:.8rem;">Optimal {_co2_opt:.3f} kg</span>
     </div>
   </div>
 </div>""", unsafe_allow_html=True)
 
-        st.markdown("<div class='space-md'></div>", unsafe_allow_html=True)
-        st.markdown(f'<p class="section-subtitle">🌍 {_proj:.4f} kg Savings Equals…</p>', unsafe_allow_html=True)
-        st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
+        st.markdown(f"<div class='sub-heading'>🌍 {_proj:.3f} kg Savings Equals…</div>", unsafe_allow_html=True)
         for lbl, val in co2_equivalents(_proj).items():
             st.markdown(
-                f'<div style="display:flex;align-items:center;gap:13px;padding:9px 0;'
-                f'border-bottom:2px solid var(--border-subtle);">'
-                f'<span style="color:var(--text-secondary);font-size:0.87rem;flex:1;line-height:1.5;">{lbl}</span>'
-                f'<span style="color:#10b981;font-weight:800;font-size:0.92rem;">{val:.2f}</span></div>',
+                f'<div style="display:flex;align-items:center;gap:12px;padding:8px 0;'
+                f'border-bottom:1px solid var(--border-light);">'
+                f'<span style="color:var(--text-secondary);font-size:.85rem;flex:1;">{lbl}</span>'
+                f'<span style="color:var(--accent-green);font-weight:700;font-size:.88rem;">{val:.2f}</span></div>',
                 unsafe_allow_html=True,
             )
 
-    st.markdown("<div class='space-lg'></div>", unsafe_allow_html=True)
-
     _m1, _m2, _m3, _m4 = st.columns(4)
-    _m1.metric("🔴 Baseline",   f"{_co2_now:.4f} kg")
-    _m2.metric("🟢 Optimised",  f"{_co2_opt:.4f} kg")
-    _m3.metric("💰 CO₂ Saved",  f"{_proj:.4f} kg", delta=f"-{_proj_p:.1f}%", delta_color="inverse")
-    _m4.metric("⚡ Energy",     f"{_nrg:.4f} kWh")
+    _m1.metric("🔴 Baseline",  f"{_co2_now:.3f} kg")
+    _m2.metric("🟢 Optimised", f"{_co2_opt:.3f} kg")
+    _m3.metric("💰 CO₂ Saved", f"{_proj:.3f} kg",  delta=f"-{_proj_p:.1f}%", delta_color="inverse")
+    _m4.metric("⚡ Energy",    f"{_nrg:.3f} kWh")
 
     # Historical chart
     if not _log_df.empty and "timestamp" in _log_df and "co2_kg" in _log_df:
         st.markdown("<hr>", unsafe_allow_html=True)
-        st.markdown('<p class="section-subtitle">📋 Cumulative CO₂ Over Time</p>', unsafe_allow_html=True)
-        st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
+        st.markdown("<div class='section-heading'>📋 Cumulative CO₂ Over Time</div>", unsafe_allow_html=True)
         _ldf = _log_df.copy()
         _ldf["ts"] = pd.to_datetime(_ldf["timestamp"], errors="coerce")
         _ldf = _ldf.dropna(subset=["ts"]).sort_values("ts")
         fig_hist = go.Figure()
         fig_hist.add_trace(go.Scatter(
             x=_ldf["ts"], y=_ldf["co2_kg"].cumsum(),
-            mode="lines+markers", line={"color": "#10b981", "width": 3},
-            fill="tozeroy", fillcolor="rgba(16, 185, 129, 0.1)",
-            marker={"size": 5, "color": "#10b981"},
+            mode="lines+markers", line={"color": "#10b981", "width": 2},
+            fill="tozeroy", fillcolor="rgba(16,185,129,.06)",
         ))
         fig_hist.update_layout(
-            plot_bgcolor="rgba(15, 12, 41, 0.4)", paper_bgcolor="rgba(0,0,0,0)",
-            font={"color": "#e2e8f0", "family": "Inter"},
-            height=250, margin={"l": 60, "r": 40, "t": 25, "b": 45},
-            xaxis={"gridcolor": "rgba(139, 92, 246, 0.15)"},
-            yaxis={"gridcolor": "rgba(139, 92, 246, 0.15)", "title": "Cumulative CO₂ (kg)"},
+            plot_bgcolor="#0a0f1a", paper_bgcolor="#0a0f1a", font={"color": "#cbd5e1"},
+            height=240, margin={"l": 50, "r": 30, "t": 20, "b": 40},
+            xaxis={"gridcolor": "#1e293b"},
+            yaxis={"gridcolor": "#1e293b", "title": "kg CO₂ (cumulative)"},
         )
         st.plotly_chart(fig_hist, use_container_width=True)
-
-        st.markdown("<div class='space-md'></div>", unsafe_allow_html=True)
         st.dataframe(
             _log_df.sort_values("timestamp", ascending=False),
             use_container_width=True, hide_index=True,
         )
 
-# ══════════════════════════════════════════════════════════════
-# PAGE: Achievements
-# ══════════════════════════════════════════════════════════════
-elif _page == "achievements":
-    st.markdown('<p class="section-title">🏅 Achievements & Eco-Milestones</p>', unsafe_allow_html=True)
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════
+# TAB 5 — Achievements
+# ══════════════════════════════════════════════
+with T5:
+    st.markdown("<div class='section-heading'>🏅 Achievements & Eco-Milestones</div>", unsafe_allow_html=True)
 
     _s1, _s2, _s3, _s4 = st.columns(4)
-    _kpi(_s1, "Total Runs",    str(_stats["runs"]),   f'{_stats["rec"]} recommended')
-    _kpi(_s2, "CO₂ Tracked",   f'{_stats["co2"]:.4f}', "kg CO₂ total",
-         border="#ef4444", val_color="#ef4444")
-    _kpi(_s3, "🔥 Streak",     str(_stats["streak"]), "consecutive days",
-         border="#f59e0b", val_color="#f59e0b")
-    _kpi(_s4, "⚡ Energy Used", f'{_stats["kwh"]:.3f}', "kWh total",
-         border="#a78bfa", val_color="#a78bfa")
+    _kpi(_s1, "Total Runs",    str(_stats["runs"]),  f'{_stats["rec"]} recommended')
+    _kpi(_s2, "CO₂ Tracked",   f'{_stats["co2"]:.3f}', "kg CO₂ total",     border="#ef4444", val_color="#ef4444")
+    _kpi(_s3, "🔥 Streak",     str(_stats["streak"]), "consecutive days",  border="#f59e0b", val_color="#f59e0b")
+    _kpi(_s4, "⚡ Energy Used", f'{_stats["kwh"]:.2f}', "kWh total",        border="#8b5cf6", val_color="#8b5cf6")
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<p class="section-subtitle">🏆 Badges</p>', unsafe_allow_html=True)
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
-    _bc_cols = st.columns(4, gap="medium")
+    st.markdown("<div class='sub-heading'>🏆 Badges</div>", unsafe_allow_html=True)
+    st.markdown("<div class='badge-grid'>", unsafe_allow_html=True)
+    _bc_cols = st.columns(4)
     for _bi, _bdg in enumerate(BADGES):
         with _bc_cols[_bi % 4]:
             _earned = _bdg["id"] in _stats["badges"]
+            _name_clr = "#10b981" if _earned else "#94a3b8"
+            _status_cls = "earned" if _earned else "locked"
+            _status_txt = "✓ EARNED" if _earned else "Locked"
             st.markdown(f"""
 <div class="badge-card {'earned' if _earned else ''}" style="opacity:{'1' if _earned else '.4'};">
-  <div style="font-size:2.4rem;margin-bottom:7px;">{_bdg['icon']}</div>
-  <div style="color:{'#10b981' if _earned else 'var(--text-secondary)'};font-weight:700;
-       font-size:0.83rem;margin-bottom:5px;">{_bdg['name']}</div>
-  <div style="color:var(--text-faint);font-size:0.72rem;margin-bottom:9px;line-height:1.5;">{_bdg['desc']}</div>
-  <div style="margin-top:9px;">
-    {'<span style="color:#10b981;font-size:0.72rem;font-weight:800;">✓ EARNED</span>'
-     if _earned else
-     '<span style="color:var(--text-faint);font-size:0.72rem;font-weight:600;">🔒 Locked</span>'}
+  <span class="badge-icon">{_bdg['icon']}</span>
+  <div class="badge-name" style="color:{_name_clr};">
+    {_bdg['name']}
   </div>
+  <div class="badge-desc">{_bdg['desc']}</div>
+  <span class="badge-status {_status_cls}">{_status_txt}</span>
 </div>""", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<p class="section-subtitle">📈 Your Impact Summary</p>', unsafe_allow_html=True)
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
-    _imp1, _imp2, _imp3 = st.columns(3, gap="large")
-
+    st.markdown("<div class='sub-heading'>📈 Your Impact Summary</div>", unsafe_allow_html=True)
+    _imp1, _imp2, _imp3 = st.columns(3)
     def _impact_card(col, icon, val, label, clr):
         col.markdown(f"""
-<div class="card" style="text-align:center;padding:1.75rem 1.4rem;">
-  <div style="font-size:2.7rem;margin-bottom:11px;">{icon}</div>
-  <div style="color:{clr};font-size:1.85rem;font-weight:800;margin:9px 0;letter-spacing:-1px;">{val}</div>
-  <div style="color:var(--text-secondary);font-size:0.87rem;font-weight:600;line-height:1.5;">{label}</div>
+<div class="impact-card">
+  <span class="impact-icon">{icon}</span>
+  <div class="impact-value" style="color:{clr};">{val}</div>
+  <div class="impact-label">{label}</div>
 </div>""", unsafe_allow_html=True)
 
     _impact_card(_imp1, "🌳",
@@ -2178,42 +2111,34 @@ elif _page == "achievements":
                  "km of driving avoided", "#3b82f6")
     _impact_card(_imp3, "📱",
                  f'{_stats["co2"] / CO2_EQUIV["📱 phone charges"]:.0f}',
-                 "phone charges equivalent", "#a78bfa")
+                 "phone charges equivalent", "#8b5cf6")
 
     # Tips
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<p class="section-subtitle">💡 Smart Tips</p>', unsafe_allow_html=True)
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
+    st.markdown("<div class='sub-heading'>💡 Smart Tips</div>", unsafe_allow_html=True)
     _min_t = _full.loc[_full["ci"].idxmin(), "time"]
     _max_t = _full.loc[_full["ci"].idxmax(), "time"]
     _avg_c = float(_full["ci"].mean())
     for _tip, _clr in [
-        (f"🌙 **Best time today:** {to_12h(_min_t)} — the grid is cleanest during this period.", "#10b981"),
-        (f"🔥 **Avoid {to_12h(_max_t)}** — this is the dirtiest grid period of the day.", "#ef4444"),
-        (f"📊 **Today's average CI:** {_avg_c:.0f} gCO₂/kWh — "
-         f"{'below' if _avg_c < 300 else 'above'} the 300g benchmark.", "#f59e0b"),
-        ("🔄 **Enable Live Mode** in the sidebar to keep data automatically refreshed.", "#3b82f6"),
-        ("🏅 **Log your runs** to build your streak and unlock achievement badges!", "#a78bfa"),
+        (f"🌙 Best time today: <strong>{to_12h(_min_t)}</strong> — grid is cleanest then.", "#10b981"),
+        (f"🔥 Avoid <strong>{to_12h(_max_t)}</strong> — dirtiest grid of the day.", "#ef4444"),
+        (f"📊 Today's avg CI: <strong>{_avg_c:.0f} gCO₂/kWh</strong> — "
+         f"{'below' if _avg_c < 300 else 'above'} the 300 g benchmark.", "#f59e0b"),
+        ("🔄 Enable Live Mode in the sidebar to keep data fresh automatically.", "#3b82f6"),
+        ("🏅 Log your runs to build your streak and unlock badges!", "#8b5cf6"),
     ]:
         st.markdown(
-            f'<div style="background:var(--bg-card);border-left:4px solid {_clr};border-radius:12px;'
-            f'padding:13px 17px;margin-bottom:9px;color:var(--text-secondary);font-size:0.88rem;'
-            f'line-height:1.7;box-shadow:var(--shadow-card);">{_tip}</div>',
+            f'<div class="tip-card" style="border-left-color:{_clr} !important;">{_tip}</div>',
             unsafe_allow_html=True,
         )
 
-# ══════════════════════════════════════════════════════════════
-# PAGE: Logger
-# ══════════════════════════════════════════════════════════════
-elif _page == "logger":
-    st.markdown('<p class="section-title">📝 Log an Appliance Run</p>', unsafe_allow_html=True)
-    st.markdown(
-        f"<p style='color:var(--text-muted);font-size:0.88rem;margin-bottom:1.5rem;'>"
-        f"System time: <strong style='color:#10b981;'>{exact_time_str(st.session_state.tz)}</strong> "
-        f"({st.session_state.tz})</p>",
-        unsafe_allow_html=True,
-    )
+
+# ══════════════════════════════════════════════
+# TAB 6 — Logger
+# ══════════════════════════════════════════════
+with T6:
+    st.markdown("<div class='section-heading'>📝 Log an Appliance Run</div>", unsafe_allow_html=True)
+    st.caption(f"System time: **{exact_time_str(st.session_state.tz)}** ({st.session_state.tz})")
 
     with st.form("run_form", clear_on_submit=False):
         _fa, _fb, _fc = st.columns(3)
@@ -2233,12 +2158,10 @@ elif _page == "logger":
             _f_app   = st.selectbox("Appliance", list(APPLIANCES.keys()))
             _f_notes = st.text_input("Notes", value=f"Zone: {_loc_lbl}")
 
-        st.markdown('<p style="font-size:0.95rem;font-weight:700;color:var(--text-secondary);margin:1.5rem 0 0.9rem 0;">⚡ Meter Readings</p>', unsafe_allow_html=True)
+        st.markdown("<div class='sub-heading'>Meter Readings</div>", unsafe_allow_html=True)
         _m_a, _m_b = st.columns(2)
-        with _m_a: _mb = st.number_input("Before (kWh)", min_value=0.0, format="%.4f")
-        with _m_b: _ma = st.number_input("After (kWh)",  min_value=0.0, format="%.4f")
-
-        st.markdown("<div style='margin:1.25rem 0;'></div>", unsafe_allow_html=True)
+        with _m_a: _mb = st.number_input("Before (kWh)", min_value=0.0, format="%.3f")
+        with _m_b: _ma = st.number_input("After (kWh)",  min_value=0.0, format="%.3f")
         _submit = st.form_submit_button("💾 Save Run", use_container_width=True)
 
     if _submit:
@@ -2255,40 +2178,40 @@ elif _page == "logger":
                 "appliance":        _f_app,
                 "start_time":       _f_start,
                 "end_time":         _et,
-                "kwh_used":         round(float(_kwh_used), 6),
+                "kwh_used":         round(float(_kwh_used), 4),
                 "avg_ci_g_per_kwh": round(float(_ci_run), 2),
-                "co2_kg":           round(co2_kg(_kwh_used, _ci_run), 6),
+                "co2_kg":           round(co2_kg(_kwh_used, _ci_run), 4),
                 "location":         _loc_lbl,
                 "timezone":         st.session_state.tz,
                 "notes":            _f_notes,
             })
             read_log.clear()
             st.success(
-                f"✅ Logged — {_kwh_used:.4f} kWh · "
-                f"{co2_kg(_kwh_used, _ci_run):.6f} kg CO₂"
+                f"✅ Logged — {_kwh_used:.3f} kWh · "
+                f"{co2_kg(_kwh_used, _ci_run):.4f} kg CO₂"
             )
             if _f_type == "recommended":
                 st.balloons()
 
-# ══════════════════════════════════════════════════════════════
-# PAGE: Data Explorer
-# ══════════════════════════════════════════════════════════════
-elif _page == "explorer":
-    st.markdown('<p class="section-title">🔍 Raw Grid Data & Configuration</p>', unsafe_allow_html=True)
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════
+# TAB 7 — Data
+# ══════════════════════════════════════════════
+with T7:
+    st.markdown("<div class='section-heading'>🔍 Raw Grid Data & Config</div>", unsafe_allow_html=True)
 
     with st.expander("📍 Current Configuration", expanded=False):
         st.json({
-            "Mode":              st.session_state.loc_mode,
-            "Latitude":          st.session_state.lat,
-            "Longitude":         st.session_state.lon,
-            "Timezone":          st.session_state.tz,
-            "Data Source":       st.session_state.data_source,
-            "Live Mode":         st.session_state.live_mode,
-            "Refresh (s)":       st.session_state.refresh_s,
-            "Alert Enabled":     st.session_state.alert_enabled,
-            "Alert Threshold":   st.session_state.alert_thresh,
-            "Daily Budget (kg)": st.session_state.daily_budget_kg,
+            "Mode":             st.session_state.loc_mode,
+            "Latitude":         st.session_state.lat,
+            "Longitude":        st.session_state.lon,
+            "Timezone":         st.session_state.tz,
+            "Data Source":      st.session_state.data_source,
+            "Live Mode":        st.session_state.live_mode,
+            "Refresh (s)":      st.session_state.refresh_s,
+            "Alert Enabled":    st.session_state.alert_enabled,
+            "Alert Threshold":  st.session_state.alert_thresh,
+            "Daily Budget (kg)":st.session_state.daily_budget_kg,
         })
         if st.button("💾 Save Config"):
             CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -2300,49 +2223,42 @@ elif _page == "explorer":
             )
             st.success("✅ Saved to config/location.json")
 
-    st.markdown("<div class='space-md'></div>", unsafe_allow_html=True)
-    st.markdown('<p class="section-subtitle">📊 Grid Data Table</p>', unsafe_allow_html=True)
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
-
+    st.markdown("<hr>", unsafe_allow_html=True)
     _cols_show = [c for c in ["time","thermal_mw","hydro_mw","nuclear_mw","res_mw","ci"] if c in _raw.columns]
     st.dataframe(
         _raw[_cols_show].sort_values("time").reset_index(drop=True),
-        use_container_width=True, hide_index=True, height=390,
+        use_container_width=True, hide_index=True, height=360,
     )
 
-    st.markdown("<div class='space-md'></div>", unsafe_allow_html=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
     _csv_raw = _raw[_cols_show].to_csv(index=False).encode()
-    _c7a, _c7b = st.columns(2, gap="medium")
+    _c7a, _c7b = st.columns(2)
     with _c7a:
         st.download_button(
             "📥 Download Grid CSV", _csv_raw,
-            file_name=f"carbonwise_grid_{st.session_state.lat:.2f}_{st.session_state.lon:.2f}.csv",
+            file_name=f"carbonwise_{st.session_state.lat:.2f}_{st.session_state.lon:.2f}.csv",
             mime="text/csv", use_container_width=True,
         )
     with _c7b:
         if not _log_df.empty:
             st.download_button(
                 "📥 Download Run History", _log_df.to_csv(index=False).encode(),
-                file_name="carbonwise_run_history.csv",
+                file_name="carbonwise_runs.csv",
                 mime="text/csv", use_container_width=True,
             )
 
-    st.markdown("<div class='space-sm'></div>", unsafe_allow_html=True)
     if st.button("🔄 Clear Cache & Refresh", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown('<p class="section-subtitle">ℹ️ Simulation Architecture</p>', unsafe_allow_html=True)
+    st.markdown("<div class='sub-heading'>ℹ️ Simulation Architecture</div>", unsafe_allow_html=True)
     st.markdown(f"""
-<div class="card" style="font-size:0.87rem;line-height:1.9;color:var(--text-secondary);">
-  <strong style="color:#10b981;font-size:0.95rem;">DataEngine.fetch_live()</strong> first attempts the
-  <strong style="color:#3b82f6;">Electricity Maps</strong> free-tier API.
-  On failure, it falls back to <code>_simulate_profile()</code>, a time-seeded NumPy simulation that
-  reproduces realistic demand curves including night troughs, morning/evening peaks, and midday solar suppression.<br><br>
-  The <strong style="color:#f59e0b;">refresh seed</strong> rotates every
-  <strong>{st.session_state.refresh_s} seconds</strong>,
-  ensuring data evolves naturally between refreshes without identical repeats.
-  All 96 fifteen-minute slots are computed in a single vectorised pass —
-  <strong style="color:#10b981;">no gaps, no duplicate slots</strong>.
+<div class="info-card" style="color:var(--text-secondary);font-size:.85rem;line-height:1.8;">
+  <strong style="color:var(--accent-green);">DataEngine.fetch_live()</strong> first attempts the Electricity Maps free-tier API.
+  On failure it falls back to <code>_simulate_profile()</code>, a time-seeded NumPy simulation that
+  reproduces real demand curves (night troughs, morning/evening peaks, midday solar suppression).<br><br>
+  The <strong style="color:var(--accent-green);">refresh seed</strong> rotates every <strong>{st.session_state.refresh_s} s</strong>,
+  so data evolves naturally between pages without identical repeats.
+  All 96 fifteen-minute slots are computed in one vectorised pass — no gaps, no duplicate slots.
 </div>""", unsafe_allow_html=True)
