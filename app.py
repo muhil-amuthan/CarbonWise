@@ -24,7 +24,7 @@ import streamlit.components.v1 as components
 # 0. App-level config
 # ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="CarbonWise ⚡",
+    page_title="Carbon Wise",
     page_icon="🌍",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -33,9 +33,7 @@ st.set_page_config(
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger("carbonwise")
 
-# ──────────────────────────────────────────────────────────────
-# 1. Constants & lookup tables
-# ──────────────────────────────────────────────────────────────
+
 STEP_MIN    = 15
 LOG_FILE    = Path("logs/runs.jsonl")
 CONFIG_FILE = Path("config/location.json")
