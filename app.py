@@ -1113,6 +1113,39 @@ code, pre, .mono {
     padding-left: 1.5rem !important;
 }
 
+/* ── Logger Form Cards ── */
+.form-section {
+    background: var(--bg-card) !important;
+    border-radius: 16px !important;
+    padding: 1.5rem !important;
+    border: 1px solid var(--border-color) !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.form-section-title {
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    color: var(--accent-green) !important;
+    margin-bottom: 1rem !important;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.data-card {
+    background: var(--bg-card) !important;
+    border-radius: 16px !important;
+    padding: 1.5rem !important;
+    border: 1px solid var(--border-color) !important;
+    margin-bottom: 1.5rem !important;
+    transition: all 0.3s ease;
+}
+
+.data-card:hover {
+    border-color: var(--accent-green) !important;
+    box-shadow: var(--shadow-card);
+}
+
 /* ── Divider ── */
 hr {
     border: none !important;
@@ -2134,43 +2167,165 @@ with T5:
 
 
 # ══════════════════════════════════════════════
-# TAB 6 — Logger
+# TAB 6 — Logger (IMPROVED UI)
 # ══════════════════════════════════════════════
 with T6:
-    st.markdown("<div class='section-heading'>📝 Log an Appliance Run</div>", unsafe_allow_html=True)
-    st.caption(f"System time: **{exact_time_str(st.session_state.tz)}** ({st.session_state.tz})")
+    st.markdown("<div class='section-heading'>📝 Log Your Appliance Run</div>", unsafe_allow_html=True)
+    
+    # Time display card
+    st.markdown(f"""
+    <div class="info-card" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(6, 182, 212, 0.08)) !important; padding: 1rem !important; margin-bottom: 1.5rem !important;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+            <div>
+                <div style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 4px;">Current System Time</div>
+                <div style="color: var(--accent-green); font-size: 1.1rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;">
+                    🕐 {exact_time_str(st.session_state.tz)}
+                </div>
+            </div>
+            <div>
+                <div style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 4px;">Timezone</div>
+                <div style="color: var(--text-secondary); font-size: 0.9rem; font-weight: 600;">
+                    🌍 {st.session_state.tz}
+                </div>
+            </div>
+            <div>
+                <div style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 4px;">Current CI</div>
+                <div style="color: {ci_color(_cur_ci)}; font-size: 0.9rem; font-weight: 700;">
+                    {ci_emoji(_cur_ci)} {_cur_ci:.0f} gCO₂/kWh
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     with st.form("run_form", clear_on_submit=False):
+        # Section 1: Run Details
+        st.markdown("""
+        <div class="form-section-title">
+            📅 Run Details
+        </div>
+        """, unsafe_allow_html=True)
+        
         _fa, _fb, _fc = st.columns(3)
         with _fa:
-            _f_date = st.date_input("Date", datetime.now())
-            _f_type = st.selectbox("Run Type", ["recommended", "baseline", "test"])
+            _f_date = st.date_input("📆 Date", datetime.now(), help="When did you run this appliance?")
         with _fb:
+            _f_type = st.selectbox(
+                "🎯 Run Type", 
+                ["recommended", "baseline", "test"],
+                help="Was this scheduled optimally?"
+            )
+        with _fc:
+            _f_app = st.selectbox(
+                "🔌 Appliance", 
+                list(APPLIANCES.keys()),
+                help="Which appliance did you use?"
+            )
+
+        st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+
+        # Section 2: Timing
+        st.markdown("""
+        <div class="form-section-title">
+            ⏰ Timing
+        </div>
+        """, unsafe_allow_html=True)
+        
+        _ta, _tb = st.columns(2)
+        with _ta:
             _def_start = (
                 _windows[st.session_state.sel_window]["start"]
                 if _windows and st.session_state.sel_window < len(_windows)
                 else _now_slot
             )
-            _f_start = st.text_input("Start (HH:MM)", value=_def_start)
-            _f_dur   = st.number_input("Duration (min)", 15,
-                                       value=ceil15(int(st.session_state.duration)), step=15)
-        with _fc:
-            _f_app   = st.selectbox("Appliance", list(APPLIANCES.keys()))
-            _f_notes = st.text_input("Notes", value=f"Zone: {_loc_lbl}")
+            _f_start = st.text_input(
+                "⏱️ Start Time (HH:MM)", 
+                value=_def_start,
+                help="When did the appliance start running?"
+            )
+        with _tb:
+            _f_dur = st.number_input(
+                "⏳ Duration (minutes)", 
+                min_value=15,
+                value=ceil15(int(st.session_state.duration)), 
+                step=15,
+                help="How long did it run?"
+            )
 
-        st.markdown("<div class='sub-heading'>Meter Readings</div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+
+        # Section 3: Energy Meter Readings
+        st.markdown("""
+        <div class="form-section-title">
+            ⚡ Energy Meter Readings
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.caption("📊 Enter the meter readings before and after the appliance run")
+        
         _m_a, _m_b = st.columns(2)
-        with _m_a: _mb = st.number_input("Before (kWh)", min_value=0.0, format="%.3f")
-        with _m_b: _ma = st.number_input("After (kWh)",  min_value=0.0, format="%.3f")
-        _submit = st.form_submit_button("💾 Save Run", use_container_width=True)
+        with _m_a:
+            _mb = st.number_input(
+                "📉 Before (kWh)", 
+                min_value=0.0, 
+                format="%.3f",
+                help="Meter reading before starting"
+            )
+        with _m_b:
+            _ma = st.number_input(
+                "📈 After (kWh)", 
+                min_value=0.0, 
+                format="%.3f",
+                help="Meter reading after completion"
+            )
+
+        # Calculated energy display
+        if _ma > _mb:
+            _calc_kwh = _ma - _mb
+            st.markdown(f"""
+            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); 
+                 border-radius: 10px; padding: 12px; margin-top: 12px; text-align: center;">
+                <span style="color: var(--text-muted); font-size: 0.8rem;">Energy Consumed: </span>
+                <span style="color: var(--accent-green); font-size: 1.1rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;">
+                    {_calc_kwh:.3f} kWh
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+
+        # Section 4: Additional Notes
+        st.markdown("""
+        <div class="form-section-title">
+            📝 Additional Notes
+        </div>
+        """, unsafe_allow_html=True)
+        
+        _f_notes = st.text_area(
+            "Notes (optional)",
+            value=f"Zone: {_loc_lbl}",
+            height=80,
+            help="Add any additional information",
+            label_visibility="collapsed"
+        )
+
+        # Submit button
+        st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+        _submit = st.form_submit_button(
+            "💾 Save Run", 
+            use_container_width=True,
+            help="Click to save this run to your log"
+        )
 
     if _submit:
         _kwh_used = _ma - _mb
         if _kwh_used <= 0:
-            st.error("❌ 'After' reading must exceed 'Before'.")
+            st.error("❌ **Invalid Reading** — 'After' reading must be greater than 'Before' reading")
         else:
             _ci_run = DataEngine.ci_at(_full, _f_start) or float(_full["ci"].mean())
             _et     = mins_to_hm(hm_to_mins(_f_start) + ceil15(int(_f_dur)))
+            _co2_saved = co2_kg(_kwh_used, _ci_run)
+            
             append_log({
                 "timestamp":        datetime.now().isoformat(),
                 "date":             str(_f_date),
@@ -2180,85 +2335,294 @@ with T6:
                 "end_time":         _et,
                 "kwh_used":         round(float(_kwh_used), 4),
                 "avg_ci_g_per_kwh": round(float(_ci_run), 2),
-                "co2_kg":           round(co2_kg(_kwh_used, _ci_run), 4),
+                "co2_kg":           round(_co2_saved, 4),
                 "location":         _loc_lbl,
                 "timezone":         st.session_state.tz,
                 "notes":            _f_notes,
             })
+            
             read_log.clear()
-            st.success(
-                f"✅ Logged — {_kwh_used:.3f} kWh · "
-                f"{co2_kg(_kwh_used, _ci_run):.4f} kg CO₂"
-            )
+            
+            # Success message with details
+            st.markdown(f"""
+            <div class="alert alert-g" style="margin-top: 1rem;">
+                <div style="flex: 1;">
+                    <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-green); margin-bottom: 8px;">
+                        ✅ Run Logged Successfully!
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 12px;">
+                        <div>
+                            <div style="color: var(--text-muted); font-size: 0.7rem;">Energy Used</div>
+                            <div style="color: var(--accent-green); font-size: 0.95rem; font-weight: 600;">{_kwh_used:.3f} kWh</div>
+                        </div>
+                        <div>
+                            <div style="color: var(--text-muted); font-size: 0.7rem;">CO₂ Footprint</div>
+                            <div style="color: var(--accent-amber); font-size: 0.95rem; font-weight: 600;">{_co2_saved:.4f} kg</div>
+                        </div>
+                        <div>
+                            <div style="color: var(--text-muted); font-size: 0.7rem;">Carbon Intensity</div>
+                            <div style="color: {ci_color(_ci_run)}; font-size: 0.95rem; font-weight: 600;">{_ci_run:.0f} gCO₂/kWh</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
             if _f_type == "recommended":
                 st.balloons()
 
+    # Recent logs preview
+    if not _log_df.empty:
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown("<div class='sub-heading'>📋 Recent Logs (Last 5)</div>", unsafe_allow_html=True)
+        
+        _recent = _log_df.sort_values("timestamp", ascending=False).head(5)
+        
+        for idx, row in _recent.iterrows():
+            _run_type_color = "#10b981" if row.get("run_type") == "recommended" else "#3b82f6"
+            _run_type_icon = "🏆" if row.get("run_type") == "recommended" else "📊"
+            
+            st.markdown(f"""
+            <div class="data-card" style="padding: 1rem !important;">
+                <div style="display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 1rem;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                            <span style="background: {_run_type_color}22; color: {_run_type_color}; 
+                                 padding: 3px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600;">
+                                {_run_type_icon} {row.get("run_type", "N/A").upper()}
+                            </span>
+                            <span style="color: var(--text-secondary); font-size: 0.75rem;">
+                                {row.get("date", "N/A")}
+                            </span>
+                        </div>
+                        <div style="color: var(--text-primary); font-size: 1rem; font-weight: 600; margin-bottom: 4px;">
+                            {APPLIANCES.get(row.get("appliance", ""), {}).get("icon", "🔌")} {row.get("appliance", "N/A")}
+                        </div>
+                        <div style="color: var(--text-muted); font-size: 0.75rem;">
+                            ⏰ {to_12h(row.get("start_time", "00:00"))} — {to_12h(row.get("end_time", "00:00"))}
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                        <div style="text-align: center;">
+                            <div style="color: var(--text-muted); font-size: 0.65rem; margin-bottom: 2px;">ENERGY</div>
+                            <div style="color: var(--accent-blue); font-size: 0.9rem; font-weight: 700;">
+                                {row.get("kwh_used", 0):.3f} kWh
+                            </div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="color: var(--text-muted); font-size: 0.65rem; margin-bottom: 2px;">CO₂</div>
+                            <div style="color: var(--accent-amber); font-size: 0.9rem; font-weight: 700;">
+                                {row.get("co2_kg", 0):.4f} kg
+                            </div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div style="color: var(--text-muted); font-size: 0.65rem; margin-bottom: 2px;">CI</div>
+                            <div style="color: {ci_color(row.get('avg_ci_g_per_kwh', 400))}; font-size: 0.9rem; font-weight: 700;">
+                                {row.get("avg_ci_g_per_kwh", 0):.0f}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
 
 # ══════════════════════════════════════════════
-# TAB 7 — Data
+# TAB 7 — Data (IMPROVED UI)
 # ══════════════════════════════════════════════
 with T7:
-    st.markdown("<div class='section-heading'>🔍 Raw Grid Data & Config</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-heading'>🔍 Raw Grid Data & Configuration</div>", unsafe_allow_html=True)
 
-    with st.expander("📍 Current Configuration", expanded=False):
-        st.json({
-            "Mode":             st.session_state.loc_mode,
-            "Latitude":         st.session_state.lat,
-            "Longitude":        st.session_state.lon,
-            "Timezone":         st.session_state.tz,
-            "Data Source":      st.session_state.data_source,
-            "Live Mode":        st.session_state.live_mode,
-            "Refresh (s)":      st.session_state.refresh_s,
-            "Alert Enabled":    st.session_state.alert_enabled,
-            "Alert Threshold":  st.session_state.alert_thresh,
-            "Daily Budget (kg)":st.session_state.daily_budget_kg,
-        })
-        if st.button("💾 Save Config"):
-            CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            CONFIG_FILE.write_text(
-                json.dumps({"lat": st.session_state.lat,
-                             "lon": st.session_state.lon,
-                             "tz":  st.session_state.tz}, indent=2),
-                encoding="utf-8",
-            )
-            st.success("✅ Saved to config/location.json")
+    # Configuration Card
+    st.markdown("<div class='sub-heading'>📍 Current Configuration</div>", unsafe_allow_html=True)
+    
+    _config_data = {
+        "Location Mode": st.session_state.loc_mode,
+        "Coordinates": f"{st.session_state.lat:.4f}, {st.session_state.lon:.4f}",
+        "Timezone": st.session_state.tz,
+        "Data Source": st.session_state.data_source,
+        "Live Mode": "✅ Enabled" if st.session_state.live_mode else "❌ Disabled",
+        "Refresh Interval": f"{st.session_state.refresh_s}s",
+        "Alert Enabled": "✅ Yes" if st.session_state.alert_enabled else "❌ No",
+        "Alert Threshold": f"{st.session_state.alert_thresh} gCO₂/kWh",
+        "Daily CO₂ Budget": f"{st.session_state.daily_budget_kg} kg",
+    }
+    
+    st.markdown("""
+    <div class="data-card">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+    """, unsafe_allow_html=True)
+    
+    for key, value in _config_data.items():
+        st.markdown(f"""
+            <div style="padding: 12px; background: var(--bg-secondary); border-radius: 10px; border: 1px solid var(--border-light);">
+                <div style="color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+                    {key}
+                </div>
+                <div style="color: var(--text-primary); font-size: 0.95rem; font-weight: 600;">
+                    {value}
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    # Save config button
+    if st.button("💾 Save Configuration to File", use_container_width=True):
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_FILE.write_text(
+            json.dumps({
+                "lat": st.session_state.lat,
+                "lon": st.session_state.lon,
+                "tz": st.session_state.tz,
+                "saved_at": datetime.now().isoformat()
+            }, indent=2),
+            encoding="utf-8",
+        )
+        st.success("✅ Configuration saved successfully!")
 
     st.markdown("<hr>", unsafe_allow_html=True)
-    _cols_show = [c for c in ["time","thermal_mw","hydro_mw","nuclear_mw","res_mw","ci"] if c in _raw.columns]
+
+    # Grid Data Table
+    st.markdown("<div class='sub-heading'>📊 Grid Data (24-Hour Profile)</div>", unsafe_allow_html=True)
+    
+    _cols_show = [c for c in ["time", "thermal_mw", "hydro_mw", "nuclear_mw", "res_mw", "ci"] if c in _raw.columns]
+    
+    # Statistics summary
+    st.markdown(f"""
+    <div class="data-card" style="padding: 1rem !important; margin-bottom: 1rem !important;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; text-align: center;">
+            <div>
+                <div style="color: var(--text-muted); font-size: 0.7rem; margin-bottom: 4px;">MIN CI</div>
+                <div style="color: #10b981; font-size: 1.1rem; font-weight: 700;">{_raw['ci'].min():.1f}</div>
+            </div>
+            <div>
+                <div style="color: var(--text-muted); font-size: 0.7rem; margin-bottom: 4px;">AVG CI</div>
+                <div style="color: #3b82f6; font-size: 1.1rem; font-weight: 700;">{_raw['ci'].mean():.1f}</div>
+            </div>
+            <div>
+                <div style="color: var(--text-muted); font-size: 0.7rem; margin-bottom: 4px;">MAX CI</div>
+                <div style="color: #ef4444; font-size: 1.1rem; font-weight: 700;">{_raw['ci'].max():.1f}</div>
+            </div>
+            <div>
+                <div style="color: var(--text-muted); font-size: 0.7rem; margin-bottom: 4px;">DATA POINTS</div>
+                <div style="color: var(--text-primary); font-size: 1.1rem; font-weight: 700;">{len(_raw)}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.dataframe(
         _raw[_cols_show].sort_values("time").reset_index(drop=True),
-        use_container_width=True, hide_index=True, height=360,
+        use_container_width=True, 
+        hide_index=True, 
+        height=400,
     )
 
     st.markdown("<hr>", unsafe_allow_html=True)
+
+    # Download Section
+    st.markdown("<div class='sub-heading'>📥 Download Data</div>", unsafe_allow_html=True)
+    
     _csv_raw = _raw[_cols_show].to_csv(index=False).encode()
-    _c7a, _c7b = st.columns(2)
-    with _c7a:
+    
+    _d1, _d2 = st.columns(2)
+    
+    with _d1:
         st.download_button(
-            "📥 Download Grid CSV", _csv_raw,
-            file_name=f"carbonwise_{st.session_state.lat:.2f}_{st.session_state.lon:.2f}.csv",
-            mime="text/csv", use_container_width=True,
+            "📊 Download Grid Data (CSV)",
+            _csv_raw,
+            file_name=f"carbonwise_grid_{st.session_state.lat:.2f}_{st.session_state.lon:.2f}_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            help="Download today's 24-hour grid data"
         )
-    with _c7b:
+    
+    with _d2:
         if not _log_df.empty:
             st.download_button(
-                "📥 Download Run History", _log_df.to_csv(index=False).encode(),
-                file_name="carbonwise_runs.csv",
-                mime="text/csv", use_container_width=True,
+                "📝 Download Run History (CSV)",
+                _log_df.to_csv(index=False).encode(),
+                file_name=f"carbonwise_runs_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True,
+                help="Download your complete run history"
+            )
+        else:
+            st.button(
+                "📝 No Run History Available",
+                disabled=True,
+                use_container_width=True
             )
 
-    if st.button("🔄 Clear Cache & Refresh", use_container_width=True):
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # System Information
+    st.markdown("<div class='sub-heading'>ℹ️ System Information</div>", unsafe_allow_html=True)
+    
+    st.markdown(f"""
+    <div class="data-card" style="padding: 1.5rem !important;">
+        <h4 style="color: var(--accent-green); margin-bottom: 1rem !important;">🔬 Data Architecture</h4>
+        
+        <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 10px; border-left: 3px solid var(--accent-green); margin-bottom: 1rem;">
+            <div style="color: var(--text-primary); font-weight: 600; margin-bottom: 0.5rem;">Data Source Pipeline</div>
+            <div style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                <strong style="color: var(--accent-green);">DataEngine.fetch_live()</strong> attempts to retrieve real-time 
+                carbon intensity from the <strong>Electricity Maps free-tier API</strong>. On failure or timeout, it falls back 
+                to <code>_simulate_profile()</code>, a sophisticated time-seeded NumPy simulation.
+            </div>
+        </div>
+
+        <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 10px; border-left: 3px solid var(--accent-blue); margin-bottom: 1rem;">
+            <div style="color: var(--text-primary); font-weight: 600; margin-bottom: 0.5rem;">Simulation Model</div>
+            <div style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                The simulation reproduces realistic demand curves including:
+                <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                    <li>Night troughs (00:00–05:00)</li>
+                    <li>Morning & evening peaks (07:00–09:00, 18:00–20:00)</li>
+                    <li>Midday solar suppression (10:00–16:00)</li>
+                    <li>Intra-hour sinusoidal variations</li>
+                </ul>
+            </div>
+        </div>
+
+        <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 10px; border-left: 3px solid var(--accent-amber);">
+            <div style="color: var(--text-primary); font-weight: 600; margin-bottom: 0.5rem;">Refresh Mechanism</div>
+            <div style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                The <strong style="color: var(--accent-amber);">refresh seed</strong> rotates every 
+                <strong>{st.session_state.refresh_s}s</strong>, ensuring data evolves naturally between page reloads 
+                without duplicate slots. All <strong>96 fifteen-minute slots</strong> are computed in a single vectorized pass.
+            </div>
+        </div>
+
+        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; text-align: center;">
+                <div>
+                    <div style="color: var(--text-muted); font-size: 0.75rem;">Current Seed</div>
+                    <div style="color: var(--accent-cyan); font-size: 0.95rem; font-weight: 600; font-family: 'JetBrains Mono', monospace;">
+                        {_seed}
+                    </div>
+                </div>
+                <div>
+                    <div style="color: var(--text-muted); font-size: 0.75rem;">Slots Generated</div>
+                    <div style="color: var(--accent-purple); font-size: 0.95rem; font-weight: 600;">
+                        {len(_full)} × 15min
+                    </div>
+                </div>
+                <div>
+                    <div style="color: var(--text-muted); font-size: 0.75rem;">Next Refresh</div>
+                    <div style="color: var(--accent-green); font-size: 0.95rem; font-weight: 600;">
+                        {st.session_state.refresh_s}s
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Cache control
+    st.markdown("<div style='margin: 1.5rem 0;'></div>", unsafe_allow_html=True)
+    if st.button("🔄 Clear Cache & Force Refresh", use_container_width=True, help="Clear all cached data and reload"):
         st.cache_data.clear()
         st.rerun()
-
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-heading'>ℹ️ Simulation Architecture</div>", unsafe_allow_html=True)
-    st.markdown(f"""
-<div class="info-card" style="color:var(--text-secondary);font-size:.85rem;line-height:1.8;">
-  <strong style="color:var(--accent-green);">DataEngine.fetch_live()</strong> first attempts the Electricity Maps free-tier API.
-  On failure it falls back to <code>_simulate_profile()</code>, a time-seeded NumPy simulation that
-  reproduces real demand curves (night troughs, morning/evening peaks, midday solar suppression).<br><br>
-  The <strong style="color:var(--accent-green);">refresh seed</strong> rotates every <strong>{st.session_state.refresh_s} s</strong>,
-  so data evolves naturally between pages without identical repeats.
-  All 96 fifteen-minute slots are computed in one vectorised pass — no gaps, no duplicate slots.
-</div>""", unsafe_allow_html=True)
