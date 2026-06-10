@@ -1296,18 +1296,15 @@ if st.session_state.live_mode:
     )
 
 
-#"""
-Sidebar — clean rewrite. All logic identical; styling uses
-a consistent helper instead of scattered unsafe_allow_html strings.
-"""
-
-# ── helpers ────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
+# 8. Sidebar
+# ──────────────────────────────────────────────────────────────
 
 def _sec(title: str, icon: str = "") -> None:
     """Render a sidebar section header."""
     prefix = f"{icon} " if icon else ""
     st.markdown(
-        f"<p style='font-size:11px;font-weight:600;color:var(--text-color);"
+        f"<p style='font-size:11px;font-weight:600;color:var(--text-primary);"
         f"opacity:.55;text-transform:uppercase;letter-spacing:.06em;"
         f"margin:0 0 8px;'>{prefix}{title}</p>",
         unsafe_allow_html=True,
@@ -1328,8 +1325,6 @@ def _info(text: str) -> None:
         f"margin-top:6px;'>{text}</div>",
         unsafe_allow_html=True,
     )
-
-# ── sidebar ─────────────────────────────────────────────────────────────────
 
 with st.sidebar:
 
@@ -1361,6 +1356,7 @@ with st.sidebar:
               if st.session_state.loc_mode in _LOC_MODES else 0,
         label_visibility="collapsed",
     )
+    _upload_file = None
 
     if st.session_state.loc_mode == "Auto-Detect":
         if st.button("Detect via IP", use_container_width=True):
@@ -1476,7 +1472,6 @@ function go(){
               if st.session_state.data_source in _DS else 0,
         label_visibility="collapsed",
     )
-    _upload_file = None
 
     if st.session_state.data_source == "Automatic (API)":
         st.session_state.api_token = st.text_input(
@@ -1564,6 +1559,8 @@ function go(){
         "Daily CO₂ budget (kg)", 0.1, 10.0,
         float(st.session_state.daily_budget_kg), 0.1, "%.1f",
     )
+
+
 # ──────────────────────────────────────────────────────────────
 # 9. Data loading
 # ──────────────────────────────────────────────────────────────
@@ -1761,7 +1758,7 @@ with T1:
     col_main, col_side = st.columns([2, 1])
 
     with col_main:
-        st.markdown("<div class='sub-heading'>24-Hour Carbon Intensity · {st.session_state.tz}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='sub-heading'>24-Hour Carbon Intensity · {st.session_state.tz}</div>", unsafe_allow_html=True)
 
         # Gauge
         fig_g = go.Figure(go.Indicator(
@@ -2211,7 +2208,7 @@ with T5:
 
 
 # ══════════════════════════════════════════════
-# TAB 6 — Logger (IMPROVED UI)
+# TAB 6 — Logger
 # ══════════════════════════════════════════════
 with T6:
     st.markdown("<div class='section-heading'>📝 Log Your Appliance Run</div>", unsafe_allow_html=True)
@@ -2473,7 +2470,7 @@ with T6:
 
 
 # ══════════════════════════════════════════════
-# TAB 7 — Data (IMPROVED UI)
+# TAB 7 — Data
 # ══════════════════════════════════════════════
 with T7:
     st.markdown("<div class='section-heading'>🔍 Raw Grid Data & Configuration</div>", unsafe_allow_html=True)
