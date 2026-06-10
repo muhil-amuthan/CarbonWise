@@ -24,8 +24,8 @@ import streamlit.components.v1 as components
 # 0. App-level config
 # ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="CarbonWise ⚡",
-    page_icon="🌍",
+    page_title="Carbon Wise",
+    page_icon="🌳",
     layout="wide",
     initial_sidebar_state="expanded",
 )
