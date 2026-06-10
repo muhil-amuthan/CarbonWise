@@ -1296,13 +1296,46 @@ if st.session_state.live_mode:
     )
 
 
-# ──────────────────────────────────────────────────────────────
-# 8. SIDEBAR
-# ──────────────────────────────────────────────────────────────
+#"""
+Sidebar — clean rewrite. All logic identical; styling uses
+a consistent helper instead of scattered unsafe_allow_html strings.
+"""
+
+# ── helpers ────────────────────────────────────────────────────────────────
+
+def _sec(title: str, icon: str = "") -> None:
+    """Render a sidebar section header."""
+    prefix = f"{icon} " if icon else ""
+    st.markdown(
+        f"<p style='font-size:11px;font-weight:600;color:var(--text-color);"
+        f"opacity:.55;text-transform:uppercase;letter-spacing:.06em;"
+        f"margin:0 0 8px;'>{prefix}{title}</p>",
+        unsafe_allow_html=True,
+    )
+
+def _divider() -> None:
+    st.markdown(
+        "<hr style='border:none;border-top:1px solid rgba(128,128,128,.15);"
+        "margin:12px 0;'>",
+        unsafe_allow_html=True,
+    )
+
+def _info(text: str) -> None:
+    st.markdown(
+        f"<div style='font-size:12px;padding:7px 10px;"
+        f"border-radius:8px;border:1px solid rgba(99,179,237,.35);"
+        f"color:#3182ce;background:rgba(99,179,237,.08);"
+        f"margin-top:6px;'>{text}</div>",
+        unsafe_allow_html=True,
+    )
+
+# ── sidebar ─────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
-    st.markdown("<div class='sidebar-title'>🔄 Live Mode</div>", unsafe_allow_html=True)
+
+    # ── Live mode ────────────────────────────────────────────────────────────
+    _sec("Live mode", "⟳")
+
     st.session_state.live_mode = st.toggle(
         "Auto-refresh", value=st.session_state.live_mode, key="_live"
     )
@@ -1314,17 +1347,13 @@ with st.sidebar:
             value=st.session_state.refresh_s,
             format_func=lambda x: _ri_map[x],
         )
-        st.markdown(
-            f"<div style='background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.1)); "
-            f"border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 10px; padding: 10px 14px; margin-top: 8px;'>"
-            f"<span style='color: #10b981; font-size: 0.8rem; font-weight: 600;'>"
-            f"🟢 Live — every {_ri_map[st.session_state.refresh_s]}</span></div>",
-            unsafe_allow_html=True,
-        )
-    st.markdown("</div>", unsafe_allow_html=True)
+        _info(f"● Live — refreshing every {_ri_map[st.session_state.refresh_s]}")
 
-    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
-    st.markdown("<div class='sidebar-title'>📍 Location</div>", unsafe_allow_html=True)
+    _divider()
+
+    # ── Location ─────────────────────────────────────────────────────────────
+    _sec("Location", "◎")
+
     _LOC_MODES = ["Auto-Detect", "GPS (Browser)", "Manual Select", "Custom Coordinates"]
     st.session_state.loc_mode = st.radio(
         "Mode", _LOC_MODES,
@@ -1334,58 +1363,55 @@ with st.sidebar:
     )
 
     if st.session_state.loc_mode == "Auto-Detect":
-        if st.button("🔍 Detect via IP", use_container_width=True):
+        if st.button("Detect via IP", use_container_width=True):
             with st.spinner("Locating…"):
                 _loc = detect_ip_location()
             if _loc:
-                st.session_state.lat  = _loc["lat"]
-                st.session_state.lon  = _loc["lon"]
-                st.session_state.tz   = _loc.get("timezone", "UTC")
+                st.session_state.lat = _loc["lat"]
+                st.session_state.lon = _loc["lon"]
+                st.session_state.tz  = _loc.get("timezone", "UTC")
                 st.success(f"📍 {_loc['city']}, {_loc['country']}")
                 st.rerun()
             else:
                 st.error("Detection failed — try Manual Select.")
-        st.markdown(
-            f"<div style='background: var(--bg-secondary); padding: 12px 14px; border-radius: 10px; margin-top: 8px; border: 1px solid var(--border-color);'>"
-            f"<div style='color: var(--text-muted); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;'>Coordinates</div>"
-            f"<div style='color: #10b981; font-size: 0.9rem; font-weight: 600;'>"
-            f"{st.session_state.lat:.4f}, {st.session_state.lon:.4f}</div></div>",
-            unsafe_allow_html=True,
-        )
+        st.caption(f"Coordinates: {st.session_state.lat:.4f}, {st.session_state.lon:.4f}")
 
     elif st.session_state.loc_mode == "GPS (Browser)":
         components.html("""
 <style>
-html,body{margin:0;padding:10px;background:transparent;font-family:'Inter',sans-serif;}
-#btn{width:100%;padding:10px;background:linear-gradient(135deg,#1e3a5f,#0f172a);
-     color:#10b981;border:1.5px solid rgba(16,185,129,.45);border-radius:10px;
-     cursor:pointer;font-weight:600;font-size:13px;transition:all .2s;}
-#btn:hover{background:rgba(16,185,129,.12);transform:translateY(-1px);}
-#btn:disabled{opacity:.6;}
-#msg{color:#64748b;font-size:11px;margin-top:5px;text-align:center;min-height:16px;}
-.c{background:#1f2937;padding:10px;border-radius:8px;margin-top:8px;
-   color:#10b981;font-size:12px;font-weight:600;display:none;border:1px solid rgba(16,185,129,.2);}
+html,body{margin:0;padding:8px;background:transparent;font-family:sans-serif;}
+#btn{width:100%;padding:8px;background:transparent;color:inherit;
+     border:1px solid rgba(128,128,128,.35);border-radius:8px;
+     cursor:pointer;font-size:13px;transition:background .15s;}
+#btn:hover{background:rgba(128,128,128,.08);}
+#btn:disabled{opacity:.5;}
+#msg,#c{font-size:11px;margin-top:5px;color:#888;min-height:14px;}
 </style>
-<button id="btn" onclick="go()">📡 Use GPS</button>
-<div id="msg"></div><div id="c" class="c"></div>
+<button id="btn" onclick="go()">Use GPS</button>
+<div id="msg"></div>
+<div id="c"></div>
 <script>
 function go(){
-  var btn=document.getElementById('btn'),msg=document.getElementById('msg'),c=document.getElementById('c');
-  if(!navigator.geolocation){msg.innerHTML='<span style="color:#ef4444">Not supported</span>';return;}
-  btn.textContent='⏳ Locating…';btn.disabled=true;msg.textContent='Waiting…';
+  var btn=document.getElementById('btn'),
+      msg=document.getElementById('msg'),
+      c  =document.getElementById('c');
+  if(!navigator.geolocation){msg.textContent='Not supported';return;}
+  btn.textContent='Locating…'; btn.disabled=true; msg.textContent='Waiting for permission…';
   navigator.geolocation.getCurrentPosition(
-    p=>{btn.textContent='✅ Done';c.style.display='block';
-        c.innerHTML='📍 '+p.coords.latitude.toFixed(5)+', '+p.coords.longitude.toFixed(5);},
-    e=>{btn.textContent='📡 Use GPS';btn.disabled=false;
-        msg.innerHTML='<span style="color:#ef4444">'+(e.code===1?'Permission denied':'Error')+'</span>';},
+    p=>{btn.textContent='Done ✓';
+        c.textContent=p.coords.latitude.toFixed(5)+', '+p.coords.longitude.toFixed(5);},
+    e=>{btn.textContent='Use GPS'; btn.disabled=false;
+        msg.textContent=(e.code===1?'Permission denied':'Error');},
     {enableHighAccuracy:true,timeout:12000,maximumAge:0}
   );
 }
-</script>""", height=120)
+</script>""", height=100)
         _ga, _gb = st.columns(2)
-        with _ga: _glat = st.number_input("Lat",  -90.0,  90.0, st.session_state.lat, 0.0001, "%.5f")
-        with _gb: _glon = st.number_input("Lon", -180.0, 180.0, st.session_state.lon, 0.0001, "%.5f")
-        if st.button("✅ Apply GPS", use_container_width=True):
+        with _ga:
+            _glat = st.number_input("Lat",  -90.0,  90.0, st.session_state.lat, 0.0001, "%.5f")
+        with _gb:
+            _glon = st.number_input("Lon", -180.0, 180.0, st.session_state.lon, 0.0001, "%.5f")
+        if st.button("Apply GPS", use_container_width=True):
             st.session_state.lat = _glat
             st.session_state.lon = _glon
             st.rerun()
@@ -1407,34 +1433,42 @@ function go(){
         _zd = _zones[_zone]
         st.session_state.lat, st.session_state.lon = _zd["lat"], _zd["lon"]
         st.session_state.tz = GRID_ZONES[_reg]["timezone"]
-        st.markdown(
-            f"<div style='background: var(--bg-secondary); padding: 12px 14px; border-radius: 10px; margin-top: 8px; border: 1px solid var(--border-color);'>"
-            f"<div style='color: var(--text-muted); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;'>Zone Avg CI</div>"
-            f"<div style='color: #10b981; font-size: 1rem; font-weight: 600;'>{_zd['ci_avg']} gCO₂/kWh</div>"
-            f"<div style='color: var(--text-muted); font-size: 0.7rem; margin-top: 4px;'>{GRID_ZONES[_reg]['voltage']}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
+        st.caption(
+            f"Zone avg CI: **{_zd['ci_avg']} gCO₂/kWh** · "
+            f"{GRID_ZONES[_reg]['voltage']}"
         )
 
     else:  # Custom Coordinates
         _cc, _cd = st.columns(2)
-        with _cc: st.session_state.lat = st.number_input("Lat",  -90.0,  90.0, st.session_state.lat, format="%.4f")
-        with _cd: st.session_state.lon = st.number_input("Lon", -180.0, 180.0, st.session_state.lon, format="%.4f")
+        with _cc:
+            st.session_state.lat = st.number_input(
+                "Lat", -90.0, 90.0, st.session_state.lat, format="%.4f"
+            )
+        with _cd:
+            st.session_state.lon = st.number_input(
+                "Lon", -180.0, 180.0, st.session_state.lon, format="%.4f"
+            )
         _tz_list = pytz.common_timezones
         st.session_state.tz = st.selectbox(
             "Timezone", _tz_list,
-            index=_tz_list.index(st.session_state.tz) if st.session_state.tz in _tz_list else 0,
+            index=_tz_list.index(st.session_state.tz)
+                  if st.session_state.tz in _tz_list else 0,
         )
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
-    st.markdown(f"<div class='live-time'>🕐 {exact_time_str(st.session_state.tz)}</div>", unsafe_allow_html=True)
+    _divider()
+
+    # ── Clock ────────────────────────────────────────────────────────────────
     _slot = slot_str(st.session_state.tz)
-    st.markdown(f"<div class='tz-sub'>{st.session_state.tz} &nbsp;|&nbsp; slot {to_12h(_slot)}</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.caption(
+        f"🕐 **{exact_time_str(st.session_state.tz)}** · "
+        f"{st.session_state.tz} · slot {to_12h(_slot)}"
+    )
 
-    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
-    st.markdown("<div class='sidebar-title'>📡 Data Source</div>", unsafe_allow_html=True)
+    _divider()
+
+    # ── Data source ──────────────────────────────────────────────────────────
+    _sec("Data source", "⬡")
+
     _DS = ["Automatic (API)", "Sample Data", "Upload CSV"]
     st.session_state.data_source = st.radio(
         "Source", _DS,
@@ -1445,25 +1479,27 @@ function go(){
     _upload_file = None
 
     if st.session_state.data_source == "Automatic (API)":
-        st.caption("Electricity Maps API + real-time simulation.")
         st.session_state.api_token = st.text_input(
-            "API Token (optional)", type="password",
-            value=st.session_state.api_token, placeholder="Free-tier token"
+            "API token (optional)", type="password",
+            value=st.session_state.api_token, placeholder="Free-tier token",
         )
-        if st.button("🔄 Force Refresh", use_container_width=True):
+        if st.button("Force refresh", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
+        st.caption("Electricity Maps API + real-time simulation.")
 
     elif st.session_state.data_source == "Upload CSV":
-        st.warning("Upload mode — expects columns: time, thermal_mw, hydro_mw, nuclear_mw, res_mw")
+        st.caption("Expected columns: time, thermal_mw, hydro_mw, nuclear_mw, res_mw")
         _upload_file = st.file_uploader("CSV", type=["csv"], label_visibility="collapsed")
 
     else:
         st.caption("Built-in synthetic grid profile.")
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
-    st.markdown("<div class='sidebar-title'>🔌 Appliance</div>", unsafe_allow_html=True)
+    _divider()
+
+    # ── Appliance ────────────────────────────────────────────────────────────
+    _sec("Appliance", "⚡")
+
     _prev = st.session_state.appliance
     st.session_state.appliance = st.selectbox(
         "Type", list(APPLIANCES.keys()),
@@ -1476,50 +1512,58 @@ function go(){
         st.session_state.duration = _ap["dur"]
         st.session_state.deadline = _ap["deadline"]
 
-    st.session_state.kw = st.number_input(
-        "Power (kW)", min_value=0.001, value=float(st.session_state.kw), step=0.05, format="%.3f"
-    )
-    st.session_state.duration = st.number_input(
-        "Duration (min)", min_value=15, value=int(st.session_state.duration), step=15
-    )
+    _col_kw, _col_dur = st.columns(2)
+    with _col_kw:
+        st.session_state.kw = st.number_input(
+            "Power (kW)", min_value=0.001,
+            value=float(st.session_state.kw), step=0.05, format="%.3f",
+        )
+    with _col_dur:
+        st.session_state.duration = st.number_input(
+            "Duration (min)", min_value=15,
+            value=int(st.session_state.duration), step=15,
+        )
+
     _dl = st.text_input("Deadline (HH:MM)", value=st.session_state.deadline)
     if valid_hhmm(_dl):
         st.session_state.deadline = _dl
     else:
-        st.error("⚠️ Invalid time — use HH:MM (24-h)")
+        st.error("Invalid time — use HH:MM (24-h)")
 
     _avail = (hm_to_mins(st.session_state.deadline) - hm_to_mins(_slot)) % 1440
-    st.info(f"⏱️ **{_avail} min** until deadline ({_avail // 60}h {_avail % 60}m)")
+    st.info(f"⏱ {_avail} min until deadline ({_avail // 60}h {_avail % 60}m)")
 
-    if st.button("↩️ Reset Defaults", use_container_width=True):
+    if st.button("Reset defaults", use_container_width=True):
         _ap = APPLIANCES[st.session_state.appliance]
         st.session_state.kw       = _ap["kw"]
         st.session_state.duration = _ap["dur"]
         st.session_state.deadline = _ap["deadline"]
         st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
-    st.markdown("<div class='sidebar-title'>⚡ Optimisation</div>", unsafe_allow_html=True)
+    _divider()
+
+    # ── Optimisation ──────────────────────────────────────────────────────────
+    _sec("Optimisation", "◈")
     _top_k = st.slider("Top windows", 3, 12, 5)
-    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='sidebar-section'>", unsafe_allow_html=True)
-    st.markdown("<div class='sidebar-title'>🔔 Alerts & Budget</div>", unsafe_allow_html=True)
+    _divider()
+
+    # ── Alerts & budget ───────────────────────────────────────────────────────
+    _sec("Alerts & budget", "🔔")
+
     st.session_state.alert_enabled = st.toggle(
         "Enable CI alerts", value=st.session_state.alert_enabled
     )
     if st.session_state.alert_enabled:
         st.session_state.alert_thresh = st.slider(
-            "Alert below (gCO₂/kWh)", 50, 400, st.session_state.alert_thresh, 25
+            "Alert below (gCO₂/kWh)", 50, 400,
+            st.session_state.alert_thresh, 25,
         )
+
     st.session_state.daily_budget_kg = st.number_input(
         "Daily CO₂ budget (kg)", 0.1, 10.0,
-        float(st.session_state.daily_budget_kg), 0.1, "%.1f"
+        float(st.session_state.daily_budget_kg), 0.1, "%.1f",
     )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
 # ──────────────────────────────────────────────────────────────
 # 9. Data loading
 # ──────────────────────────────────────────────────────────────
