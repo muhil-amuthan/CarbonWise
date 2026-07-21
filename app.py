@@ -2,7 +2,6 @@
 CarbonWise ⚡ — Real-Time Grid Carbon Intensity Scheduler
 Enhanced UI: Better spacing, typography, and modern attractive theme
 """
-
 import math
 import json
 import time
