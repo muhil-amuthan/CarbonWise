@@ -1,45 +1,200 @@
-# CarbonWise — Grid Carbon Intensity Advisor (Prototype)
+# 🌍 CarbonWise — Grid Carbon Intensity Advisor
 
-CarbonWise is a software prototype that estimates **grid carbon intensity (CI in gCO₂/kWh)** from electricity generation mix data and recommends **low‑CO₂ time windows** to run flexible home loads (e.g., geyser, washing machine). It also includes a **Run Logger** to record smart‑meter readings and compute **CO₂ savings** (Baseline vs Recommended).
+> A real-time carbon intensity estimation system that helps users understand the environmental impact of electricity consumption by estimating the carbon intensity (gCO₂/kWh) of the power grid based on the electricity generation mix.
 
-## Problem
-Electricity consumption is measured in kWh (units), but the **CO₂ emissions per kWh are not constant**. Grid emissions change throughout the day based on the **generation mix** (thermal vs renewables). Users can reduce emissions by shifting flexible loads to cleaner time windows.
+![Python](https://img.shields.io/badge/Python-3.11-blue)
+![Streamlit](https://img.shields.io/badge/Streamlit-Web%20App-red)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## Solution (What this prototype does)
-1. Takes generation mix data (Thermal, Hydro, Nuclear, RES) in MW.
-2. Computes **Carbon Intensity (CI)** for each 15‑minute interval.
-3. Displays CI as a **graph and table**.
-4. Ranks **Top‑5 low‑CO₂ windows** before a user deadline.
-5. Estimates CO₂ for an appliance run.
-6. Logs real/simulated smart‑meter readings and shows **Baseline vs Recommended** CO₂ savings.
+---
 
-## Data Source (for real implementation)
-Generation mix values are collected from India’s public dashboards such as:
-- **National Power Portal (NPP)** — Real‑time data (Source‑Merit India)
+## 📖 Overview
 
-> Note: In this prototype, CI is computed using fixed emission factors. Accuracy depends on data availability, granularity, and update frequency of the source.
+CarbonWise is an AI-powered sustainability application that estimates the **grid carbon intensity** using electricity generation data from multiple energy sources such as:
 
-## Key Formulas
-### (1) Carbon Intensity (from generation mix)
-If `P_s` is power (MW) from source `s` and `EF_s` is the emission factor (gCO₂/kWh):
+- ☀️ Solar
+- 🌬️ Wind
+- ⚡ Hydro
+- 🔥 Coal
+- ⛽ Natural Gas
+- ☢️ Nuclear
 
-\[
-CI = \frac{\sum (P_s \times EF_s)}{\sum P_s}
-\]
+The application calculates the weighted average carbon intensity and provides actionable recommendations to reduce emissions.
 
-### (2) Appliance energy
-\[
-U(kWh) = kW \times hours
-\]
+---
 
-### (3) CO₂ for a run
-\[
-CO₂(kg) = \frac{U \times CI}{1000}
-\]
+## ✨ Features
 
-### (4) Savings
-\[
-Savings = CO₂_{baseline} - CO₂_{recommended}
-\]
+- 📊 Real-time carbon intensity estimation
+- ⚡ Supports multiple power generation sources
+- 🌱 Calculates weighted CO₂ emissions (gCO₂/kWh)
+- 📈 Interactive visualizations
+- 💡 Personalized recommendations
+- 📥 CSV input support
+- 📋 Summary report generation
+- 🌐 Streamlit web interface
 
-## Project Structure
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+- Streamlit
+
+### Backend
+- Python
+
+### Data Processing
+- Pandas
+- NumPy
+
+### Visualization
+- Matplotlib
+- Plotly
+
+### Machine Learning (Optional)
+- Scikit-learn
+
+---
+
+## 📂 Project Structure
+
+```
+CarbonWise/
+│
+├── data/                     # Input datasets
+├── docs/                     # Documentation
+├── src/                      # Source code
+│   ├── calculator.py
+│   ├── advisor.py
+│   ├── visualizer.py
+│   └── utils.py
+│
+├── app.py                    # Main Streamlit application
+├── generate_summary.py       # Report generator
+├── requirements.txt
+├── README.md
+└── LICENSE
+```
+
+---
+
+## 🚀 Installation
+
+Clone the repository
+
+```bash
+git clone https://github.com/your-username/CarbonWise.git
+```
+
+Move into the project
+
+```bash
+cd CarbonWise
+```
+
+Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+Run the application
+
+```bash
+streamlit run app.py
+```
+
+---
+
+## 📊 How It Works
+
+1. Load electricity generation data.
+2. Calculate the contribution of each energy source.
+3. Multiply each source by its emission factor.
+4. Compute the weighted average carbon intensity.
+5. Display results with graphs and recommendations.
+
+---
+
+## 📈 Example Workflow
+
+```
+Input Data
+      │
+      ▼
+Energy Mix Calculation
+      │
+      ▼
+Emission Factor Calculation
+      │
+      ▼
+Carbon Intensity (gCO₂/kWh)
+      │
+      ▼
+Visualization
+      │
+      ▼
+Recommendations
+```
+
+---
+
+## 📸 Screenshots
+
+Add screenshots of your application here.
+
+```
+docs/images/dashboard.png
+docs/images/results.png
+```
+
+---
+
+## 🎯 Future Enhancements
+
+- Live Grid API integration
+- Machine Learning prediction model
+- Hourly carbon intensity forecasting
+- User authentication
+- Historical trend analysis
+- Mobile application
+- Carbon savings calculator
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome!
+
+1. Fork the repository
+2. Create a new branch
+3. Commit your changes
+4. Push to your branch
+5. Create a Pull Request
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 👨‍💻 Author
+
+**Muhil Amuthan M**
+
+Electronics and Communication Engineering Student
+
+Machine Learning & Full Stack Development Enthusiast
+
+GitHub: https://github.com/muhil-amuthan
+
+LinkedIn:https://www.linkedin.com/in/muhil-amuthan-m
+
+---
+
+## ⭐ Support
+
+If you found this project useful, consider giving it a ⭐ on GitHub.
