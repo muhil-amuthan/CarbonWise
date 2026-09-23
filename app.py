@@ -10,7 +10,6 @@ import logging
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from typing import Optional
-
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -18,10 +17,6 @@ import pytz
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
-
-# ──────────────────────────────────────────────────────────────
-# 0. App-level config
-# ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Carbon Wise",
     page_icon="🌳",
@@ -32,9 +27,6 @@ st.set_page_config(
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger("carbonwise")
 
-# ──────────────────────────────────────────────────────────────
-# 1. Constants & lookup tables
-# ──────────────────────────────────────────────────────────────
 STEP_MIN    = 15          # scheduling granularity
 LOG_FILE    = Path("logs/runs.jsonl")
 CONFIG_FILE = Path("config/location.json")
@@ -60,7 +52,6 @@ HOUR_DEMAND = [
     1.25, 1.22, 1.15, 1.05, 0.92, 0.75,
 ]
 
-# Day-of-week (Mon=0) demand multipliers
 DOW_DEMAND = {0: 1.05, 1: 1.08, 2: 1.06, 3: 1.04, 4: 1.03, 5: 0.88, 6: 0.82}
 
 GRID_ZONES = {
@@ -405,10 +396,6 @@ class DataEngine:
         return best_ci
 
 
-# ──────────────────────────────────────────────────────────────
-# 4. Persistence helpers
-# ──────────────────────────────────────────────────────────────
-
 def ensure_dirs():
     for p in [LOG_FILE.parent, CONFIG_FILE.parent, DATA_DIR]:
         p.mkdir(parents=True, exist_ok=True)
@@ -491,11 +478,6 @@ def detect_ip_location() -> Optional[dict]:
     except requests.RequestException:
         pass
     return None
-
-
-# ──────────────────────────────────────────────────────────────
-# 5. Enhanced Global CSS — Modern, Attractive, Well-Spaced Theme
-# ──────────────────────────────────────────────────────────────
 
 st.markdown("""
 <style>
